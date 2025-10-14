@@ -1,5 +1,7 @@
 # Simple-MuJoCo-PickNPlace
 
+## (2025-10-14) This repository's update is working in progress. Previous version is deprecated.
+
 ![](img/demo.gif)
 
 Very simple MuJoCo Pick and Place task using Panda robot
