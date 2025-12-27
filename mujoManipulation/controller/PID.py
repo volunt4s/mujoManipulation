@@ -7,14 +7,14 @@ class PIDController:
                  K_d,
                  dt,
                  tau,
-                 robot_model):
+                 robot):
         
         self.K_p = K_p
         self.K_i = K_i
         self.K_d = K_d
         self.dt = dt
         self.tau = tau
-        self.robot_model = robot_model
+        self.robot = robot
 
         self.integral_sum = 0.0
 
@@ -23,7 +23,7 @@ class PIDController:
         self.d_term_prev = 0.0
 
         # For I-gain anti-windup
-        self.ctrl_range = self.robot_model.ctrl_range
+        self.ctrl_range = self.robot.model.actuator_ctrlrange
 
     
     def update(self,

@@ -7,7 +7,7 @@ import time
 
 # --- (사용자님의 기존 코드 import) ---
 from mujoManipulation.controller.PID import PIDController
-from mujoManipulation.robot.Panda import FrankaPanda
+from mujoManipulation.robot.panda import FrankaPanda
 
 # --- 소켓 및 동기화 설정 ---
 HOST = '127.0.0.1'  # Localhost
