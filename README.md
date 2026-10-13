@@ -149,6 +149,9 @@ python examples/00_gravity_comp.py --break-it   # and here is what it is holding
 
 python examples/01_joint_pid.py                 # and now it goes where you ask
 python examples/01_joint_pid.py --break-it      # without the D term, it rings
+
+python examples/02_computed_torque.py           # with the model in the loop: 0.37°
+python examples/02_computed_torque.py --pid      # the same stroke without it: 17.4°
 ```
 
 Every demo also takes `--headless`, which skips the window and prints the numbers instead.
@@ -225,17 +228,24 @@ split that keeps actuators separate from robot bodies. Everything else is rewrit
       drawn as arrows, and the *uncompensated remainder* drawn behind them. `g(q)` is a
       property of the pose and does not shrink when you compensate; the remainder is the
       arrow that vanishes, and `--break-it` brings it back at full length (0.000° droop
-      against 57°)
+      against 167°)
 
 ### Phase 1 — The control ladder (Panda only)
 - [x] **Joint-space PID** — arm-only channels, gains set by pole placement off the
       mass-matrix diagonal, and each of the three terms drawn as its own arrow at the
       joint it acts on. The payoff measurement: left to itself the integral settles at
-      [-10.3, 17.3, 1.3] N·m on joints 2, 4 and 6, against a g(q) of [-10.7, 17.4, 1.3]
-      there — it finds gravity to 3% without being told gravity exists. Three break-it
-      modes: no D (111% overshoot, never settles), no I (a permanent 7-9° droop), no
-      anti-windup (the integral winds to -300 N·m against an ±80 N·m actuator)
-- [ ] Computed torque / inverse dynamics
+      [-10.4, 17.3, 1.3] N·m on joints 2, 4 and 6, against a g(q) of [-10.7, 17.4, 1.3]
+      there — it finds gravity to 2% without being told gravity exists. Three break-it
+      modes: no D (276% overshoot, never settles), no I (a permanent 7-9° droop, which is
+      g(q)/K_p to the digit), no anti-windup (the integral winds to -306 N·m against an
+      ±80 N·m actuator)
+- [x] **Computed torque / inverse dynamics** — τ = M(q)(q̈_d + K_dė + K_pe) + h(q, q̇), which
+      cancels the plant and leaves ë + K_dė + K_pe = 0: one (ω, ζ) pair for all seven
+      joints, where PID needed seven hand-tuned pairs. Tracks a 1 Hz joint-space stroke at
+      2.8 rad/s to 0.37° peak. M(q) q̈_cmd, C(q, q̇)q̇ and g(q) are drawn as three separate
+      arrows per joint, and each switches off on its own: no M(q), no Coriolis (invisible
+      until you go fast — it scales with q̇²), no gravity
+- [ ] Operational-space control (OSC)
 - [ ] Operational-space control (OSC)
 - [ ] Impedance control
 - [ ] Each ships with: the equation in its docstring, its quantities drawn via `viz/`,

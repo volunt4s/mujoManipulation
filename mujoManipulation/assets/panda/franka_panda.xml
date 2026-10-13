@@ -1,6 +1,15 @@
 <mujoco model="franka_panda">
     <compiler angle="radian" meshdir="" inertiagrouprange="0 0"/>
-    <option impratio="20" cone="elliptic" density="1.2" viscosity="0.00002"/>
+    <!-- density/viscosity are 0, not robosuite's 1.2 / 2e-5. MuJoCo's fluid model
+         works off each body's equivalent inertia box, and this model's boxes are
+         metre-scale (link1 is 58 kg at 28 kg.m2), so "air" came out as a drag torque
+         scaling with qvel^2: 30 N.m at 1 rad/s and 118 N.m at 2 rad/s, against
+         wrist actuators that stop at 12 N.m. Real air at those speeds is milli-N.m.
+         It is harmless in robosuite's slow, contact-rich pick-and-place, where it
+         damps jitter; here it is an unmodelled disturbance bigger than the plant,
+         and the whole control ladder assumes M qacc + C qvel + g = tau. Joint
+         damping stays in the body XML, and that is the only passive force left. -->
+    <option impratio="20" cone="elliptic" density="0" viscosity="0"/>
     <size nconmax="5000" njmax="5000"/>
     
     <!-- panda assets-->

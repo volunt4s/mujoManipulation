@@ -36,7 +36,7 @@ XML = os.path.join(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--break-it",
+        "-b", "--break-it",
         action="store_true",
         help="turn gravity compensation off and watch the arm sag",
     )

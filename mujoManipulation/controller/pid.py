@@ -41,8 +41,8 @@ anti-windup
     long as it takes. So the integral is only advanced on channels whose
     unclipped demand still fits inside the limits. Saturated channel: the memory
     holds, it does not grow. Measured on the demo's unreachable target, where
-    joint 4 presses into its own limit for 3.5 s: the integral reaches −300 N·m
-    on an ±80 N·m channel without this, and −33 N·m with it.
+    joint 4 presses into its own limit for 3.5 s: the integral reaches −306 N·m
+    on an ±80 N·m channel without this, and −35 N·m with it.
 
 filtered derivative
     ė is passed through a one-pole lowpass with time constant `d_filter_tau`

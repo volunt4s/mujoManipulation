@@ -33,15 +33,15 @@ anyone having to integrate their way out of it.
 
 The three break-it modes, and the headless numbers they produce:
 
-    (none)      peak overshoot 42.5%, settled in 2.66 s, steady-state error
-                under half a degree on every joint. The integral ends up holding
-                [-10.3, 17.3, 1.3] N·m on joints 2, 4 and 6, against a g(q) of
-                [-10.7, 17.4, 1.3] N·m at that pose — it found gravity to 3%
-                without being told gravity exists, which is the whole trick.
-    --break-it  no D. Overshoot 111%, never settles, and five of the seven
-                joints slam into their torque limits. Nothing is left to absorb
-                the energy P keeps pumping in: the XML gives these joints
-                0.1 N·m·s/rad of damping, and that is all.
+    (none)      peak overshoot 47.4%, settled in 2.314 s, steady-state error
+                under a tenth of a degree on every joint. The integral ends up
+                holding [-10.4, 17.3, 1.3] N·m on joints 2, 4 and 6, against a
+                g(q) of [-10.7, 17.4, 1.3] N·m at that pose — it found gravity
+                to 2% without being told gravity exists, the whole trick.
+    --break-it  no D. Overshoot 276%, never settles, and all seven joints slam
+                into their torque limits — joint 7 ends the run 169° out.
+                Nothing is left to absorb the energy P keeps pumping in: the XML
+                gives these joints 0.1 N·m·s/rad of damping, and that is all.
     -b i        no I. Overshoot drops to 35% — the integral was paying for some
                 of it — and then the arm parks 7.08° and 8.53° short on joints 2
                 and 4 and stays there, so the settling band is never reached at
@@ -49,11 +49,12 @@ The three break-it modes, and the headless numbers they produce:
                 17.86/120 rad. That is where P stalls, and waiting does not fix
                 it.
     -b windup   no anti-windup, against a target past joint 4's limit so that
-                the demand cannot be met. The integral grows for as long as the
-                arm is stuck, and then has to be unwound before the joint can
-                come back: the return home never completes, where the same run
-                with anti-windup on gets there in 2.9 s. `--push-limit` is that
-                run — the same unreachable target, anti-windup left alone.
+                the demand cannot be met. Joint 4's integral reaches -306 N·m on
+                an ±80 N·m channel (-35 N·m with anti-windup on), and all of it
+                has to be unwound before the joint can come back: the return
+                home never completes, where the same run with anti-windup gets
+                there in 2.4 s. `--push-limit` is that run — the same
+                unreachable target, anti-windup left alone.
 """
 
 import argparse
