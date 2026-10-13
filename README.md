@@ -146,7 +146,14 @@ conda activate mujoco_sim               # python 3.12, mujoco 3.9.0
 
 python examples/00_gravity_comp.py              # the arm holds itself up
 python examples/00_gravity_comp.py --break-it   # and here is what it is holding
+
+python examples/01_joint_pid.py                 # and now it goes where you ask
+python examples/01_joint_pid.py --break-it      # without the D term, it rings
 ```
+
+Every demo also takes `--headless`, which skips the window and prints the numbers instead.
+On macOS, MuJoCo's passive viewer has to be launched under `mjpython` rather than `python`
+— `mjpython examples/01_joint_pid.py` — and `--headless` runs fine under either.
 
 ---
 
@@ -221,7 +228,13 @@ split that keeps actuators separate from robot bodies. Everything else is rewrit
       against 57°)
 
 ### Phase 1 — The control ladder (Panda only)
-- [ ] Port the existing PID onto the new skeleton
+- [x] **Joint-space PID** — arm-only channels, gains set by pole placement off the
+      mass-matrix diagonal, and each of the three terms drawn as its own arrow at the
+      joint it acts on. The payoff measurement: left to itself the integral settles at
+      [-10.3, 17.3, 1.3] N·m on joints 2, 4 and 6, against a g(q) of [-10.7, 17.4, 1.3]
+      there — it finds gravity to 3% without being told gravity exists. Three break-it
+      modes: no D (111% overshoot, never settles), no I (a permanent 7-9° droop), no
+      anti-windup (the integral winds to -300 N·m against an ±80 N·m actuator)
 - [ ] Computed torque / inverse dynamics
 - [ ] Operational-space control (OSC)
 - [ ] Impedance control
