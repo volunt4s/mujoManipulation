@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mujoManipulation"
+version = "0.1.0"
+description = "Manipulator control you can watch: classical control laws written from scratch, with every term of the equation drawn in the simulator"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "mujoco>=3.9,<4",
+    "numpy>=1.24",
+]
+
+[tool.setuptools.packages.find]
+include = ["mujoManipulation*"]
+
+[tool.setuptools.package-data]
+"mujoManipulation" = ["assets/**/*"]

@@ -7,7 +7,7 @@
     <include file="assets/panda_assets.xml"/>
 
     <!-- arena -->
-    <include file="../../asset/common_arena/simple_plane.xml"/> 
+    <include file="../common_arena/simple_plane.xml"/> 
     
     <!-- panda body xml-->
     <include file="assets/panda_body_w_objs.xml"/>

@@ -141,8 +141,11 @@ part, and the pieces map across directly:
 ## Quickstart
 
 ```bash
-conda activate mujoco_sim        # python 3.12, mujoco 3.9
-python examples/01_pid.py
+conda env create -f environment.yml     # first time only
+conda activate mujoco_sim               # python 3.12, mujoco 3.9.0
+
+python examples/00_gravity_comp.py              # the arm holds itself up
+python examples/00_gravity_comp.py --break-it   # and here is what it is holding
 ```
 
 ---
@@ -206,13 +209,16 @@ Little of the current code survives this plan, and that is fine — the repo is 
 PID law (anti-windup, filtered derivative) carries over, as does the `<mujocoinclude>`
 split that keeps actuators separate from robot bodies. Everything else is rewritten.
 
-### Phase 0 — Foundation
-- [ ] Rebuild the package skeleton: `env / robot / controller / viz`
-- [ ] `MuJoCoEnv(render=False)` — headless must work from day one
-- [ ] Split arm (7 torque channels) from gripper (2 position channels)
-- [ ] Draw-primitive types + the native `user_scn` renderer
-- [ ] **Gravity compensation** — the arm holds itself up, with the per-joint gravity torque
-      drawn as arrows you can watch shrink as it engages
+### Phase 0 — Foundation ✅
+- [x] Rebuild the package skeleton: `env / robot / controller / viz`
+- [x] `MuJoCoEnv(render=False)` — headless must work from day one
+- [x] Split arm (7 torque channels) from gripper (2 position channels)
+- [x] Draw-primitive types + the native `user_scn` renderer
+- [x] **Gravity compensation** — the arm holds itself up, with the per-joint gravity torque
+      drawn as arrows, and the *uncompensated remainder* drawn behind them. `g(q)` is a
+      property of the pose and does not shrink when you compensate; the remainder is the
+      arrow that vanishes, and `--break-it` brings it back at full length (0.000° droop
+      against 57°)
 
 ### Phase 1 — The control ladder (Panda only)
 - [ ] Port the existing PID onto the new skeleton

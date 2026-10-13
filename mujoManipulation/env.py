@@ -1,154 +1,148 @@
+"""MuJoCo model loading, introspection, stepping, and an optional viewer.
+
+The sim loop lives in the caller, not in here. `MuJoCoEnv` owns the model, the
+data, and (only if you ask for one) a passive viewer; it does not own the
+control loop, a task, or a notion of episodes.
+
+Headless is the default. Constructing an env must never open a window, because
+everything above this file — tests, batch sweeps, the Phase 3 server — has to
+be able to run without a display. Pass `render=True`, or call
+`launch_viewer()` later, when you actually want to look at something.
+"""
+
 import os
+
 import mujoco
-import mujoco.viewer
 import numpy as np
 
-class MuJoCoEnv:
-    def __init__(self, xml_path, verbose=False):
-        self.xml_path = xml_path
-        self._parse_xml()
-        self._init_viewer()
 
+class MuJoCoEnv:
+    def __init__(self, xml_path: str, render: bool = False, verbose: bool = False):
+        self.xml_path = os.path.abspath(xml_path)
+        self.verbose = verbose
+
+        self.model = mujoco.MjModel.from_xml_path(self.xml_path)
+        self.data = mujoco.MjData(self.model)
+
+        self.viewer = None
+        self.renderer = None
+
+        self._introspect()
         if verbose:
             self.print_info()
+        if render:
+            self.launch_viewer()
 
-    def _parse_xml(self):
-        """
-        Parse MuJoCo xml to MuJoCo model info
-        """
-        print(f"Parsing XML from: {self.xml_path}")
-        self.full_xml_path = os.path.abspath(os.path.join(os.getcwd(), self.xml_path))
-        
-        try:
-            self.model = mujoco.MjModel.from_xml_path(self.full_xml_path)
-            self.data = mujoco.MjData(self.model)
-        except Exception as e:
-            print(f"Error loading MuJoCo model: {e}")
-            raise
+    # --- model introspection ---------------------------------------------
 
-        # Geometry, body
-        self.n_dof = self.model.nv
-        self.n_geom = self.model.ngeom
-        self.geom_names = [
-            mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, i)
-            for i in range(self.n_geom)
-        ]
-        self.n_body = self.model.nbody
-        self.body_names = [
-            mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_BODY, i)
-            for i in range(self.n_body)
-        ]
-        
-        # Joint
-        self.n_joint = self.model.njnt
-        self.joint_types = self.model.jnt_type
-        self.joint_ranges = self.model.jnt_range
+    def _introspect(self) -> None:
+        m = self.model
 
-        self.joint_names = [
-            mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_JOINT, i)
-            for i in range(self.n_joint)
-        ]
-        self._parse_specific_joints(
-            joint_type=mujoco.mjtJoint.mjJNT_HINGE,
-            prefix="rev",
-            description="Revolute (HINGE) Joint"
-        )
-        self._parse_specific_joints(
-            joint_type=mujoco.mjtJoint.mjJNT_SLIDE,
-            prefix="pri",
-            description="Prismatic (SLIDE) Joint"
-        )
+        self.n_dof = m.nv
+        self.n_geom = m.ngeom
+        self.n_body = m.nbody
+        self.n_joint = m.njnt
+        self.n_ctrl = m.nu
 
-        # Actuator
-        self.n_ctrl = self.model.nu
-        self.ctrl_names = [
-            self.model.names[addr:].decode().split('\x00')[0]
-            for addr in self.model.name_actuatoradr
-        ]
-        self.ctrl_joint_idxs = [
-            self.model.actuator(name).trnid
-            for name in self.ctrl_names
-        ]
-        self.ctrl_ranges = self.model.actuator_ctrlrange # Control range [min, max]
-        
-        print("MuJoCo model loaded!")
+        self.geom_names = self._names(mujoco.mjtObj.mjOBJ_GEOM, m.ngeom)
+        self.body_names = self._names(mujoco.mjtObj.mjOBJ_BODY, m.nbody)
+        self.joint_names = self._names(mujoco.mjtObj.mjOBJ_JOINT, m.njnt)
+        self.ctrl_names = self._names(mujoco.mjtObj.mjOBJ_ACTUATOR, m.nu)
 
-    def _parse_specific_joints(self, joint_type, prefix, description):
+        self.joint_types = m.jnt_type
+        self.joint_ranges = m.jnt_range
+        self.ctrl_ranges = m.actuator_ctrlrange
+
+        # Joints grouped by kind. `rev_*` are the hinges you send torque to,
+        # `pri_*` the sliders — on the Panda that is exactly arm vs. fingers.
+        self._group_joints(mujoco.mjtJoint.mjJNT_HINGE, "rev", "revolute (hinge)")
+        self._group_joints(mujoco.mjtJoint.mjJNT_SLIDE, "pri", "prismatic (slide)")
+
+    def _names(self, obj_type, count) -> list:
+        return [mujoco.mj_id2name(self.model, obj_type, i) for i in range(count)]
+
+    def _group_joints(self, joint_type, prefix: str, description: str) -> None:
         idxs = np.where(self.joint_types == joint_type)[0].astype(np.int32)
-        n_joint = len(idxs)
-
-        setattr(self, f"n_{prefix}_joint", n_joint)
+        setattr(self, f"n_{prefix}_joint", len(idxs))
         setattr(self, f"{prefix}_joint_idxs", idxs)
-        
-        print(f"Found {n_joint} {description}s.")
+        setattr(self, f"{prefix}_joint_names", [self.joint_names[i] for i in idxs])
+        setattr(self, f"{prefix}_joint_mins", self.joint_ranges[idxs, 0])
+        setattr(self, f"{prefix}_joint_maxs", self.joint_ranges[idxs, 1])
+        setattr(
+            self,
+            f"{prefix}_joint_ranges",
+            self.joint_ranges[idxs, 1] - self.joint_ranges[idxs, 0],
+        )
+        if self.verbose:
+            print(f"Found {len(idxs)} {description} joint(s).")
 
-        if n_joint > 0:
-            names = [self.joint_names[i] for i in idxs]
+    # --- stepping ---------------------------------------------------------
 
-            mins = self.joint_ranges[idxs, 0]
-            maxs = self.joint_ranges[idxs, 1]
-            ranges = maxs - mins
+    @property
+    def dt(self) -> float:
+        return self.model.opt.timestep
 
-            setattr(self, f"{prefix}_joint_names", names)
-            setattr(self, f"{prefix}_joint_mins", mins)
-            setattr(self, f"{prefix}_joint_maxs", maxs)
-            setattr(self, f"{prefix}_joint_ranges", ranges)
+    def step(self, n: int = 1) -> None:
+        for _ in range(n):
+            mujoco.mj_step(self.model, self.data)
 
-        else:
-            setattr(self, f"{prefix}_joint_names", [])
-            setattr(self, f"{prefix}_joint_mins", np.array([]))
-            setattr(self, f"{prefix}_joint_maxs", np.array([]))
-            setattr(self, f"{prefix}_joint_ranges", np.array([]))
+    def forward(self) -> None:
+        mujoco.mj_forward(self.model, self.data)
 
-    def _init_viewer(self):
+    def reset(self) -> None:
+        mujoco.mj_resetData(self.model, self.data)
+        self.forward()
+
+    # --- viewer (optional) -------------------------------------------------
+
+    def launch_viewer(self):
+        """Open the passive viewer and wire the native renderer to it."""
+        import mujoco.viewer
+
+        from .viz.native import NativeRenderer
+
         self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
-    
-    def step(self):
-        mujoco.mj_step(self.model, self.data)
+        self.renderer = NativeRenderer(self.viewer.user_scn)
+        return self.viewer
 
-    def print_info(self):
-        """
-            Printout model information.
-        """
-        separator = "=" * 40
-        print(f"\n{separator}")
-        print("🤖 MODEL INFORMATION SUMMARY")
-        print(f"{separator}")
+    def is_running(self) -> bool:
+        """True while the window is open. Always true when headless, so a
+        headless caller must bound its own loop."""
+        return True if self.viewer is None else self.viewer.is_running()
 
-        print("\n--- General Counts ---")
-        print(f"Number of Geometries (n_geom): {self.n_geom}")
-        print(f"Geometry Names (geom_names): {self.geom_names}")
-        print(f"Number of Bodies (n_body): {self.n_body}")
-        print(f"Body Names (body_names): {self.body_names}")
+    def sync(self, primitives=()) -> None:
+        """Push the frame, drawing `primitives` on top. A no-op when headless,
+        so the same loop body works with and without a window."""
+        if self.viewer is None:
+            return
+        if self.renderer is not None:
+            self.renderer.draw(primitives)
+        self.viewer.sync()
 
-        print("\n--- Control Counts ---")
-        print(f"Number of Controllers (n_ctrl): {self.n_ctrl}")
-        print(f"Controller Names (ctrl_names): {self.ctrl_names}")
-        print(f"Controller Joint Indices (ctrl_joint_idxs): {self.ctrl_joint_idxs}")
-        print(f"Controller Ranges (ctrl_ranges):\n{self.ctrl_ranges}")
-        
-        print("\n--- Joint Information ---")
-        print(f"Total Number of Joints (n_joint): {self.n_joint}")
-        print(f"Joint Names (joint_names): {self.joint_names}")
-        print(f"Joint Types (joint_types): {self.joint_types}")
-        print(f"Joint Ranges (joint_ranges):\n{self.joint_ranges}")
-        
-        print("\n--- Revolute Joints ---")
-        print(f"Number of Revolute Joints (n_rev_joint): {self.n_rev_joint}")
-        if self.n_rev_joint > 0:
-            print(f"Indices (rev_joint_idxs): {self.rev_joint_idxs}")
-            print(f"Names (rev_joint_names): {self.rev_joint_names}")
-            print(f"Mins (rev_joint_mins): {self.rev_joint_mins}")
-            print(f"Maxs (rev_joint_maxs): {self.rev_joint_maxs}")
-            print(f"Ranges (rev_joint_ranges): {self.rev_joint_ranges}")
+    def close(self) -> None:
+        if self.viewer is not None:
+            self.viewer.close()
+            self.viewer = None
+            self.renderer = None
 
-        print("\n--- Prismatic Joints ---")
-        print(f"Number of Prismatic Joints (n_pri_joint): {self.n_pri_joint}")
-        if self.n_pri_joint > 0:
-            print(f"Indices (pri_joint_idxs): {self.pri_joint_idxs}")
-            print(f"Names (pri_joint_names): {self.pri_joint_names}")
-            print(f"Mins (pri_joint_mins): {self.pri_joint_mins}")
-            print(f"Maxs (pri_joint_maxs): {self.pri_joint_maxs}")
-            print(f"Ranges (pri_joint_ranges): {self.pri_joint_ranges}")
-            
-        print(f"\n{separator}\n")
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+        return False
+
+    # --- reporting --------------------------------------------------------
+
+    def print_info(self) -> None:
+        line = "=" * 52
+        print(f"\n{line}\n MODEL: {os.path.basename(self.xml_path)}\n{line}")
+        print(f"  nq={self.model.nq}  nv={self.model.nv}  nu={self.model.nu}  "
+              f"njnt={self.model.njnt}  timestep={self.dt}")
+        print(f"\n  {'idx':>3}  {'joint':<22}{'actuator':<30}ctrlrange")
+        for i in range(self.n_ctrl):
+            joint_id = self.model.actuator_trnid[i, 0]
+            joint = self.joint_names[joint_id] if joint_id >= 0 else "-"
+            lo, hi = self.ctrl_ranges[i]
+            print(f"  {i:>3}  {joint:<22}{self.ctrl_names[i]:<30}[{lo:g}, {hi:g}]")
+        print(f"{line}\n")
