@@ -2,6 +2,10 @@
 #
 # mujoco is pinned: the roadmap's Phase 4 depends on mjd_transitionFD and
 # mujoco.rollout, and the API shapes were verified against 3.9.0.
+#
+# fastapi/uvicorn are the web layer only. Nothing under env / robot /
+# controller / viz imports them, and every example runs without them installed
+# — which is the rule the server is built to keep.
 name: mujoco_sim
 channels:
   - conda-forge
@@ -11,3 +15,5 @@ dependencies:
   - pip:
       - mujoco==3.9.0
       - numpy>=1.24
+      - fastapi>=0.115
+      - uvicorn[standard]>=0.30

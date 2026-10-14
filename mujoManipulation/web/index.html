@@ -1,0 +1,69 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>mujoManipulation</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!--
+  Phase 3, W1: the pipe. Geometry once, a transform per geom per frame, and a
+  Three.js scene to put them in. No controls, no draw primitives, no plots yet
+  — those are W2 onwards. If the arm moves, the pipe works.
+
+  three.js comes from a pinned CDN rather than a bundle, because this machine
+  has no node and because a reader should be able to open these three files and
+  see the whole client. `curl` the two URLs into web/vendor/ if you need it to
+  work offline.
+-->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+  }
+}
+</script>
+
+<style>
+  :root {
+    --bg: #14161a;
+    --panel: rgba(20, 22, 26, 0.82);
+    --line: #2b2f37;
+    --text: #e6e8ec;
+    --dim: #8b919c;
+    --good: #5bc98f;
+    --bad: #e8705a;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text);
+               font: 13px/1.5 system-ui, -apple-system, sans-serif; }
+  #view { position: fixed; inset: 0; display: block; }
+  #hud {
+    position: fixed; top: 12px; left: 12px; padding: 10px 14px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    backdrop-filter: blur(8px); font-family: var(--mono); font-size: 12px;
+    line-height: 1.7; pointer-events: none; min-width: 210px;
+  }
+  #hud h1 { margin: 0 0 6px; font-size: 12px; letter-spacing: .08em;
+            text-transform: uppercase; color: var(--dim); font-weight: 600; }
+  #hud .row { display: flex; justify-content: space-between; gap: 18px; }
+  #hud .k { color: var(--dim); }
+  .up { color: var(--good); }
+  .down { color: var(--bad); }
+  #note { position: fixed; bottom: 12px; left: 12px; color: var(--dim);
+          font-family: var(--mono); font-size: 11px; }
+</style>
+
+<canvas id="view"></canvas>
+
+<div id="hud">
+  <h1>mujoManipulation</h1>
+  <div class="row"><span class="k">socket</span><span id="st-socket" class="down">connecting</span></div>
+  <div class="row"><span class="k">sim time</span><span id="st-time">—</span></div>
+  <div class="row"><span class="k">frames/s</span><span id="st-fps">—</span></div>
+  <div class="row"><span class="k">geoms</span><span id="st-geoms">—</span></div>
+  <div class="row"><span class="k">primitives</span><span id="st-draw">—</span></div>
+</div>
+
+<div id="note">drag to orbit · scroll to zoom · W1: geometry + state stream only</div>
+
+<script type="module" src="/web/app.js"></script>
