@@ -17,12 +17,14 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--xml", default=DEFAULT_XML, help="model to load")
     parser.add_argument("--stream-hz", type=float, default=60.0)
+    parser.add_argument("--no-cache", action="store_true",
+                        help="compile the XML instead of using the .mjb cache")
     args = parser.parse_args()
 
     print(f"model  : {args.xml}")
     print(f"open   : http://{args.host}:{args.port}")
     uvicorn.run(
-        create_app(args.xml, args.stream_hz),
+        create_app(args.xml, args.stream_hz, use_cache=not args.no_cache),
         host=args.host,
         port=args.port,
         log_level="warning",

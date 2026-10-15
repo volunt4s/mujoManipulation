@@ -17,11 +17,17 @@ import numpy as np
 
 
 class MuJoCoEnv:
-    def __init__(self, xml_path: str, render: bool = False, verbose: bool = False):
+    def __init__(self, xml_path: str, render: bool = False, verbose: bool = False,
+                 model: "mujoco.MjModel | None" = None):
         self.xml_path = os.path.abspath(xml_path)
         self.verbose = verbose
 
-        self.model = mujoco.MjModel.from_xml_path(self.xml_path)
+        # `model` is for a caller that has already compiled this XML and does
+        # not want it compiled again — the server, which caches the compiled
+        # bytes because mjcf compilation costs 283 MB of resident memory that
+        # the allocator never returns. Everything else passes nothing and gets
+        # the obvious behaviour.
+        self.model = model if model is not None else mujoco.MjModel.from_xml_path(self.xml_path)
         self.data = mujoco.MjData(self.model)
 
         self.viewer = None

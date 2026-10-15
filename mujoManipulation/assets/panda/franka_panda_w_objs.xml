@@ -10,7 +10,14 @@
          and the whole control ladder assumes M qacc + C qvel + g = tau. Joint
          damping stays in the body XML, and that is the only passive force left. -->
     <option impratio="20" cone="elliptic" density="0" viscosity="0"/>
-    <size nconmax="5000" njmax="5000"/>
+    <!-- memory, not nconmax/njmax. Those are robosuite's numbers for bins full of
+         objects; here they reserved a 1308 MB solver arena of which 6 s of the
+         computed-torque stroke used 18 KB — 0.0014% — with 0 contacts and 2
+         constraint rows (two joint limits). The process was being killed for
+         memory while simulating an arm that touches nothing. 16 MB is still
+         three orders of magnitude of headroom, and it is what makes one server
+         able to hold a simulation per connected client later on. -->
+    <size memory="16M"/>
     
     <!-- panda assets-->
     <include file="assets/panda_assets.xml"/>

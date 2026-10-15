@@ -34,6 +34,7 @@ import numpy as np
 from ..controller.computed_torque import ComputedTorque
 from ..env import MuJoCoEnv
 from ..robot.panda import FrankaPanda
+from .model import load_model
 from .protocol import state_message
 from .scene import Scene
 
@@ -49,10 +50,13 @@ MAX_CATCHUP_STEPS = 50
 
 
 class SimulationThread(threading.Thread):
-    def __init__(self, xml_path: str, stream_hz: float = 60.0):
+    def __init__(self, xml_path: str, stream_hz: float = 60.0, use_cache: bool = True):
         super().__init__(name="sim", daemon=True)
 
-        self.env = MuJoCoEnv(xml_path)          # headless, always
+        # Headless, always, and from the compiled cache when there is one: a
+        # server that will eventually hold a simulation per connection cannot
+        # afford to compile the XML per connection.
+        self.env = MuJoCoEnv(xml_path, model=load_model(xml_path, use_cache))
         self.panda = FrankaPanda(self.env.model, self.env.data)
         self.panda.go_home()
         self.scene = Scene(self.env.model, xml_path)

@@ -28,8 +28,9 @@ DEFAULT_XML = os.path.join(
 )
 
 
-def create_app(xml_path: str = DEFAULT_XML, stream_hz: float = 60.0) -> FastAPI:
-    sim = SimulationThread(xml_path, stream_hz=stream_hz)
+def create_app(xml_path: str = DEFAULT_XML, stream_hz: float = 60.0,
+               use_cache: bool = True) -> FastAPI:
+    sim = SimulationThread(xml_path, stream_hz=stream_hz, use_cache=use_cache)
 
     async def lifespan(app: FastAPI):
         sim.start()
@@ -37,6 +38,16 @@ def create_app(xml_path: str = DEFAULT_XML, stream_hz: float = 60.0) -> FastAPI:
         sim.stop()
 
     app = FastAPI(title="mujoManipulation", lifespan=lifespan)
+
+    @app.middleware("http")
+    async def no_cache(request, call_next):
+        # Everything here is served off disk and edited constantly. A cached
+        # module is a confusing afternoon, and there is no production traffic
+        # to protect.
+        response = await call_next(request)
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
     # The geometry blob is float data, so gzip only takes it 3.12 -> 1.72 MB.
     # Worth having, not worth tuning.
     app.add_middleware(GZipMiddleware, minimum_size=1024)
