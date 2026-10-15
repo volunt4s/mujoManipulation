@@ -76,5 +76,4 @@ examples/       one runnable demo per controller
 Not building: RL / Gym wrappers, a task framework, perception. Scope is capped at control
 algorithms.
 
-[ROADMAP.md](ROADMAP.md) is the plan of record. The previous, stable-but-unmaintained
-version lives on the **`legacy`** branch.
+The previous, stable-but-unmaintained version lives on the **`legacy`** branch.
