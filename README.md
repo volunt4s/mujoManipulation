@@ -119,22 +119,36 @@ first. And live gain tuning — move `K_p`, watch the response change in the sam
 the single most useful thing a control tutorial can offer, which a native viewer cannot give
 cheaply.
 
-It is deliberately *not* first, though. Two phases of actual control code come first, so the
-project cannot stall in web infrastructure before it has anything to show.
+It was meant to come after the whole ladder, so that the project could not stall in web
+infrastructure before it had anything to show. It got pulled forward once three rungs
+existed, for a reason the plan had not anticipated: **the web layer is a better instrument
+than the command line, not just a prettier one.** Switching `--break-it` from the terminal
+means restarting the process; in the browser it is a click, mid-stroke, with the arrows
+disappearing while the arm keeps moving. The contrast *is* the lesson, and that is the only
+place you can see both halves of it at once.
 
-### Ported from `hand_simulator`
+### How the client stays dumb
 
-The web layer is not being invented here. A sibling project of mine
-(`../hand_simulator`, FastAPI + WebSocket + Three.js over MuJoCo) already solved every hard
-part, and the pieces map across directly:
+The browser never learns what a robot is. It receives the compiled model's triangles once —
+not the STL files, which gzip badly and carry no promise about which frame their vertices
+live in — and after that a world transform per geom per frame. There is no forward
+kinematics, no notion of a body or a joint, and no per-controller code anywhere in `web/`:
 
-| There | Here |
+| Server | Browser |
 |---|---|
-| `viewer.js :: updateContacts()` — contact list → `THREE.ArrowHelper` pairs | The generic draw-primitive renderer |
-| `ConvexGeometry` workspace hull | The manipulability ellipsoid |
-| `{"type": ...}` WebSocket messages | The topic-like command/state protocol |
-| `SimulationThread` — fixed-rate loop, kinematic ↔ physics modes | The control loop server |
-| `client.py` — ZMQ + slider client | The Python client and the gain-tuning UI |
+| `mesh_vert` / `mesh_face` from the compiled model, once | triangles, 1.72 MB gzipped |
+| `geom_xpos` / `geom_xmat`, 12 floats a geom a frame | `Matrix4.set()`, row-major, no conversion |
+| draw primitives — the same plain data `viz/native.py` eats | `web/primitives.js`, the twin of that file |
+| `server/scenarios.py` — each rung's title, equation, term colours, break-it variants | a menu, generated |
+
+The last row is the one that matters for keeping it honest: a term's colour in the equation
+has to be its arrow's colour in the scene, so the colours live in the controller modules and
+are sent to the browser rather than written into CSS. Adding a rung is an entry in
+`scenarios.py` and no JavaScript at all.
+
+A sibling project (`hand_simulator`, FastAPI + WebSocket + Three.js over MuJoCo) solved much
+of this once already and was the intended source to port from; it turned out not to be on
+this machine, so the web layer here is an independent implementation.
 
 ---
 
@@ -256,12 +270,16 @@ split that keeps actuators separate from robot bodies. Everything else is rewrit
 - [ ] **Demo: one OSC controller, two robots, same Cartesian trajectory**
 
 ### Phase 3 — Web viewer + command server
-- [ ] Fixed-rate sim loop behind a WebSocket, state published every step
-- [ ] Three.js viewer consuming the same draw primitives as the native renderer
+- [x] Fixed-rate sim loop behind a WebSocket — physics at 500 Hz, one frame in eight
+      published, measured at 60.3 fps and sim/real 1.0022
+- [x] Three.js viewer consuming the same draw primitives as the native renderer
+- [x] **A menu generated from the server** — every rung and every break-it variant is a
+      click, applied between physics steps, with the arm still moving
 - [ ] **Live gain sliders** — retune `K_p` mid-run and watch the response change
 - [ ] Plots alongside the 3D view (tracking error, torque)
 - [ ] Python client: `robot.move_to(...)`, `robot.set_controller("osc")`
-- [ ] The control library must stay fully usable with the server switched off
+- [x] The control library must stay fully usable with the server switched off — checked by
+      blocking the fastapi import and loading every controller
 
 ### Phase 4 — Optimal control
 - [ ] LQR about an operating point, linearised via `mjd_transitionFD`

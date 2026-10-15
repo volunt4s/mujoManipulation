@@ -1,18 +1,32 @@
-// Boot: fetch the geometry once, then follow the socket.
+// Boot: fetch the geometry once, fetch the menu, then follow the socket.
 //
-// The stream arrives at a fixed 60 Hz and the browser redraws whenever it
-// feels like it, so the two are deliberately not coupled: the socket only ever
-// stores the newest frame and requestAnimationFrame renders whatever is there.
-// A dropped frame costs nothing and a slow tab cannot back up the server.
+// The stream arrives at a fixed 60 Hz and the browser redraws whenever it feels
+// like it, so the two are deliberately not coupled: the socket only ever stores
+// the newest frame and requestAnimationFrame renders whatever is there. A
+// dropped frame costs nothing and a slow tab cannot back up the server.
 
 import { Viewer } from '/web/viewer.js';
+import { Menu } from '/web/menu.js';
 
 const el = (id) => document.getElementById(id);
 
 const viewer = new Viewer(el('view'));
+let socket = null;
 let latest = null;          // newest state message, or null before the first
 let applied = -1;           // sim time of the frame currently on screen
 let framesSeen = 0;
+
+// Commands are fire-and-forget. The server answers by changing what it streams,
+// which is the only acknowledgement worth having: every frame carries the
+// switch positions, so the menu reflects the simulation and not a local guess
+// about what a click did.
+function send(command) {
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify(command));
+  }
+}
+
+const menu = new Menu(el('menu'), send);
 
 async function loadScene() {
   const desc = await (await fetch('/scene')).json();
@@ -25,27 +39,33 @@ async function loadScene() {
   );
 }
 
-function connect() {
-  const ws = new WebSocket(`ws://${location.host}/ws`);
+async function loadMenu() {
+  menu.setCatalogue(await (await fetch('/menu')).json());
+  menu.open();              // land on the menu, with the scene already behind it
+}
 
-  ws.onopen = () => {
+function connect() {
+  socket = new WebSocket(`ws://${location.host}/ws`);
+
+  socket.onopen = () => {
     el('st-socket').textContent = 'open';
     el('st-socket').className = 'up';
   };
-  ws.onmessage = (ev) => {
+  socket.onmessage = (ev) => {
     latest = JSON.parse(ev.data);
     framesSeen++;
   };
-  ws.onclose = () => {
+  socket.onclose = () => {
     el('st-socket').textContent = 'closed — retrying';
     el('st-socket').className = 'down';
     setTimeout(connect, 1000);        // uvicorn restarts during development
   };
-  ws.onerror = () => ws.close();
+  socket.onerror = () => socket.close();
 }
 
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'r' || e.key === 'R') viewer.resetView();
+  if (e.key === 'Escape') menu.toggle();
+  else if (e.key === 'r' || e.key === 'R') viewer.resetView();
 });
 
 // Frames per second as measured, not as hoped for.
@@ -54,24 +74,34 @@ setInterval(() => {
   framesSeen = 0;
 }, 1000);
 
+function describeRun(active) {
+  if (!active || !active.scenario) return '—';
+  const variant = active.variant ? ` · ${active.variant}` : '';
+  const paused = active.paused ? ' · paused' : '';
+  const speed = active.speed !== 1 ? ` · ${active.speed}x` : '';
+  return `${active.scenario}${variant}${speed}${paused}`;
+}
+
 function tick() {
   if (latest && latest.t !== applied) {
     viewer.applyFrame(latest.xform);
     viewer.primitives.draw(latest.draw);
     el('st-time').textContent = `${latest.t.toFixed(2)} s`;
-    // One primitive is often several meshes — an arrow is a shaft plus a
-    // cone — so both numbers are worth seeing.
+    el('st-run').textContent = describeRun(latest.active);
+    // One primitive is often several meshes — an arrow is a shaft plus a cone —
+    // so both numbers are worth seeing.
     const { count, dropped } = viewer.primitives;
     el('st-draw').textContent =
       `${latest.draw.length} prim / ${count} mesh` + (dropped ? ` (+${dropped} dropped)` : '');
+    menu.setActive(latest.active);
     applied = latest.t;
   }
   viewer.render();
   requestAnimationFrame(tick);
 }
 
-loadScene().then(connect).catch((e) => {
-  el('st-socket').textContent = 'scene failed';
+Promise.all([loadScene(), loadMenu()]).then(connect).catch((e) => {
+  el('st-socket').textContent = 'load failed';
   console.error(e);
 });
 requestAnimationFrame(tick);

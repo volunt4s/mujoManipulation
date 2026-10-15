@@ -70,10 +70,13 @@ from ..viz.primitives import Arrow, GhostPath
 # Same scale as every other rung: one metre of arrow is this many newton-metres.
 NM_PER_METRE = 40.0
 
-_INERTIAL_RGBA = (0.45, 0.35, 0.95, 0.95)   # M(q) q̈_cmd
-_CORIOLIS_RGBA = (0.15, 0.75, 0.8, 0.85)    # C(q, q̇) q̇
-_GRAVITY_RGBA = (0.95, 0.35, 0.15, 0.55)    # g(q), the colour it had in rung 0
-_GHOST_RGBA = (0.75, 0.75, 0.8, 0.45)       # where you asked it to be
+# Public because the web layer sends these to the browser: a term's colour in
+# the equation panel has to be the same colour as its arrow, and this is the
+# only place that decides it.
+INERTIAL_RGBA = (0.45, 0.35, 0.95, 0.95)   # M(q) q̈_cmd
+CORIOLIS_RGBA = (0.15, 0.75, 0.8, 0.85)    # C(q, q̇) q̇
+GRAVITY_RGBA = (0.95, 0.35, 0.15, 0.55)    # g(q), the colour it had in rung 0
+GHOST_RGBA = (0.75, 0.75, 0.8, 0.45)       # where you asked it to be
 
 
 class ComputedTorque:
@@ -237,7 +240,7 @@ class ComputedTorque:
         """
         primitives = [
             GhostPath(points=self._desired_skeleton(q_desired), width=0.012,
-                      rgba=_GHOST_RGBA)
+                      rgba=GHOST_RGBA)
         ]
 
         anchors = self.robot.arm_joint_anchors
@@ -247,9 +250,9 @@ class ComputedTorque:
             anchors, axes, self.tau_inertial, self.tau_coriolis, self.tau_gravity
         ):
             for value, width, rgba in (
-                (gravity, 0.022, _GRAVITY_RGBA),
-                (coriolis, 0.014, _CORIOLIS_RGBA),
-                (inertial, 0.008, _INERTIAL_RGBA),
+                (gravity, 0.022, GRAVITY_RGBA),
+                (coriolis, 0.014, CORIOLIS_RGBA),
+                (inertial, 0.008, INERTIAL_RGBA),
             ):
                 primitives.append(
                     Arrow(

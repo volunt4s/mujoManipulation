@@ -3,12 +3,19 @@
     GET  /            the page
     GET  /scene       the static description — geoms, materials, mesh table
     GET  /scene.bin   the geometry, once (3.12 MB, 1.72 MB gzipped)
-    WS   /ws          one state frame per screen refresh
+    GET  /menu        the scenario catalogue the client builds its menu from
+    WS   /ws          state frames out, commands in
 
-The socket is a one-way push for now; `receive` is where W3's commands land.
-The handler never touches the simulation directly — it reads the latest
-published frame and sends it, so a client that stalls or disconnects cannot
-affect the physics.
+The socket handler never touches the simulation directly. Outbound it reads the
+latest published frame, so a client that stalls or disconnects cannot affect the
+physics; inbound it drops commands on a queue that the sim thread drains between
+steps, so a controller is never swapped mid-update.
+
+There is one simulation, shared by every connected client — move a control in
+one browser and every other sees it. That is right for a tool you run on your
+own machine and wrong for a public link, where it becomes strangers fighting
+over the gains; the split into a simulation per connection belongs with
+deployment, and `SimulationThread` is already the unit it would be split on.
 """
 
 import asyncio
@@ -20,6 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 
 from .loop import SimulationThread
+from .scenarios import catalogue
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 WEB_DIR = os.path.join(os.path.dirname(_HERE), "web")
@@ -61,6 +69,10 @@ def create_app(xml_path: str = DEFAULT_XML, stream_hz: float = 60.0,
     async def scene():
         return JSONResponse(sim.scene.description())
 
+    @app.get("/menu")
+    async def menu():
+        return JSONResponse({"scenarios": catalogue(), "active": sim.state()})
+
     @app.get("/scene.bin")
     async def scene_blob():
         return Response(
@@ -72,6 +84,19 @@ def create_app(xml_path: str = DEFAULT_XML, stream_hz: float = 60.0,
     @app.websocket("/ws")
     async def stream(ws: WebSocket):
         await ws.accept()
+
+        async def receive():
+            # Commands are validated by the sim thread, which owns the switch
+            # positions; this only has to not die on malformed JSON.
+            try:
+                while True:
+                    message = await ws.receive_json()
+                    if isinstance(message, dict) and message.get("op"):
+                        sim.submit(message)
+            except (WebSocketDisconnect, RuntimeError, ValueError):
+                pass
+
+        inbound = asyncio.create_task(receive())
         period = 1.0 / sim.stream_hz
         # Sleep until the next deadline rather than for a fixed period after
         # the send: serialising a frame takes a few milliseconds, and sleeping
@@ -89,6 +114,8 @@ def create_app(xml_path: str = DEFAULT_XML, stream_hz: float = 60.0,
                 await asyncio.sleep(deadline - now)
         except WebSocketDisconnect:
             pass
+        finally:
+            inbound.cancel()
 
     app.mount("/web", StaticFiles(directory=WEB_DIR), name="web")
     return app

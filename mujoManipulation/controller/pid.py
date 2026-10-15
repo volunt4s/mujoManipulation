@@ -86,10 +86,13 @@ NM_PER_METRE = 40.0
 # the one term whose job is to lead).
 D_FILTER_TAU = 0.01
 
-_P_RGBA = (0.25, 0.5, 0.95, 0.95)     # the spring
-_I_RGBA = (0.35, 0.8, 0.4, 0.85)      # the memory
-_D_RGBA = (0.95, 0.6, 0.15, 0.55)     # the damper
-_GHOST_RGBA = (0.75, 0.75, 0.8, 0.45)  # where you asked it to be
+# Public because the web layer sends these to the browser: a term's colour in
+# the equation panel has to be the same colour as its arrow, and this is the
+# only place that decides it.
+P_RGBA = (0.25, 0.5, 0.95, 0.95)     # the spring
+I_RGBA = (0.35, 0.8, 0.4, 0.85)      # the memory
+D_RGBA = (0.95, 0.6, 0.15, 0.55)     # the damper
+GHOST_RGBA = (0.75, 0.75, 0.8, 0.45)  # where you asked it to be
 
 
 class JointSpacePID:
@@ -241,7 +244,7 @@ class JointSpacePID:
         """
         primitives = [
             GhostPath(points=self._desired_skeleton(q_desired), width=0.012,
-                      rgba=_GHOST_RGBA)
+                      rgba=GHOST_RGBA)
         ]
 
         anchors = self.robot.arm_joint_anchors
@@ -251,9 +254,9 @@ class JointSpacePID:
             anchors, axes, self.d_term, self.i_term, self.p_term
         ):
             for value, width, rgba in (
-                (d_i, 0.022, _D_RGBA),
-                (i_i, 0.014, _I_RGBA),
-                (p_i, 0.008, _P_RGBA),
+                (d_i, 0.022, D_RGBA),
+                (i_i, 0.014, I_RGBA),
+                (p_i, 0.008, P_RGBA),
             ):
                 primitives.append(
                     Arrow(

@@ -1,10 +1,10 @@
 """The fixed-rate simulation loop, on its own thread.
 
 The library's rule is that the loop lives in the caller (see `examples/`), and
-this file is simply another caller — a long-lived one that happens to be driven
-by a socket instead of by `__main__`. Nothing in `env / robot / controller /
-viz` knows this file exists, and switching the server off leaves every example
-working exactly as before.
+this file is simply another caller — a long-lived one driven by a socket
+instead of by `__main__`. Nothing in `env / robot / controller / viz` knows this
+file exists, and switching the server off leaves every example working exactly
+as before.
 
 Two rates, which is the only subtle thing in here:
 
@@ -16,37 +16,40 @@ Two rates, which is the only subtle thing in here:
 So one frame in eight is published. The sim thread builds the published frame
 itself, under a lock, and the socket handler only ever reads the latest one —
 a slow or stalled client therefore drops frames instead of dragging the physics
-down with it, and a fast one cannot ask for frames that do not exist yet.
+down with it.
 
-Pacing is done by *catch-up*, not by sleeping a timestep at a time: `sleep(dt)`
-with dt = 2 ms is at the mercy of the OS scheduler and drifts. Instead the loop
-asks how many steps are due by now, runs those, and sleeps a millisecond. If it
-ever falls far behind — a laptop lid, a breakpoint — it gives up on the lost
-time rather than sprinting through it, because a 3-second fast-forward is worse
-than a 3-second gap.
+Pacing is by *budget* rather than by sleeping a timestep at a time: `sleep(dt)`
+with dt = 2 ms is at the mercy of the scheduler and drifts, and an absolute
+`steps == elapsed/dt` schedule jumps the moment anyone touches the speed
+multiplier. So each wake-up adds the wall time since the last one — scaled by
+`speed`, and skipped entirely while paused — to a budget of owed simulation
+seconds, and spends whatever whole steps it can afford. Falling far behind, from
+a closed laptop lid or a breakpoint, forfeits the lost time instead of sprinting
+through it: a 3-second fast-forward is worse than a 3-second gap.
+
+Commands from the browser are queued and applied *between* steps, never during
+one, so a controller is never swapped out from under a half-finished update.
 """
 
+import queue
 import threading
 import time
 
 import numpy as np
 
-from ..controller.computed_torque import ComputedTorque
 from ..env import MuJoCoEnv
 from ..robot.panda import FrankaPanda
 from .model import load_model
 from .protocol import state_message
 from .scene import Scene
-
-# W1 runs one hardcoded scenario: the stroke from examples/02, because an arm
-# that holds still proves nothing about a streaming pipeline. W3 replaces this
-# with the controller picker, at which point these constants move with it.
-STROKE_AMPLITUDE = np.array([0.9, 0.5, 0.0, 0.7, 0.6, 0.5, 0.0])
-STROKE_HZ = 1.0
-OMEGA, ZETA = 20.0, 1.0
+from .scenarios import DEFAULT, SCENARIOS, valid_variant
 
 # Never run more than this many physics steps in one wake-up.
 MAX_CATCHUP_STEPS = 50
+
+# What the arrow-scale control may be set to, in newton-metres per metre.
+SCALE_RANGE = (10.0, 200.0)
+SPEED_RANGE = (0.05, 4.0)
 
 
 class SimulationThread(threading.Thread):
@@ -58,48 +61,114 @@ class SimulationThread(threading.Thread):
         # afford to compile the XML per connection.
         self.env = MuJoCoEnv(xml_path, model=load_model(xml_path, use_cache))
         self.panda = FrankaPanda(self.env.model, self.env.data)
-        self.panda.go_home()
         self.scene = Scene(self.env.model, xml_path)
-
-        self.controller = ComputedTorque(self.panda, K_p=OMEGA**2, K_d=2 * ZETA * OMEGA)
-        self.home = self.panda.HOME.copy()
 
         self.dt = self.env.dt
         self.stream_hz = float(stream_hz)
         self.publish_every = max(1, round((1.0 / self.dt) / self.stream_hz))
 
         self.speed = 1.0
+        self.paused = False
+        self.scale = 40.0
+
+        self._commands: queue.Queue = queue.Queue()
         self._steps = 0
+        self._budget = 0.0
         self._frame: dict | None = None
         self._lock = threading.Lock()
         self._stop = threading.Event()
 
-    # --- the reference ----------------------------------------------------
+        self.run_id = self.variant = None
+        self.select(DEFAULT)
 
-    def reference(self, t: float):
-        """q_d, q̇_d, q̈_d — the same (1 − cos) stroke examples/02 tracks."""
-        omega = 2.0 * np.pi * STROKE_HZ
-        half = STROKE_AMPLITUDE / 2.0
-        return (
-            self.home + half * (1.0 - np.cos(omega * t)),
-            half * omega * np.sin(omega * t),
-            half * omega**2 * np.cos(omega * t),
-        )
+    # --- what is running --------------------------------------------------
+
+    def select(self, run_id: str, variant=None) -> None:
+        """Swap the controller. Called on the sim thread, between steps.
+
+        The clock goes back to zero with it: every reference in `scenarios.py`
+        is a function of t, so a rung picked three minutes in would otherwise
+        start mid-stroke.
+        """
+        if run_id not in SCENARIOS:
+            return
+        variant = valid_variant(run_id, variant)
+        self.env.reset()
+        self.panda.go_home()
+        self.run_id, self.variant = run_id, variant
+        self.scenario = SCENARIOS[run_id](self.panda, self.dt, variant)
+        self.scenario.set_scale(self.scale)
+        self._steps = 0
+        self._budget = 0.0
+        self._publish()
+
+    def state(self) -> dict:
+        """The switch positions, so a client can render its own controls."""
+        return {
+            "scenario": self.run_id,
+            "variant": self.variant,
+            "reference": getattr(self.scenario, "reference", None),
+            "scale": self.scale,
+            "speed": self.speed,
+            "paused": self.paused,
+        }
+
+    # --- commands ---------------------------------------------------------
+
+    def submit(self, command: dict) -> None:
+        """Queue a command from any thread. Applied before the next step."""
+        self._commands.put(command)
+
+    def _drain(self) -> None:
+        touched = False
+        while True:
+            try:
+                command = self._commands.get_nowait()
+            except queue.Empty:
+                break
+            self._apply(command)
+            touched = True
+        if touched and self.paused:
+            # Nothing will step, so nothing would otherwise redraw.
+            self._publish()
+
+    def _apply(self, command: dict) -> None:
+        op = command.get("op")
+        if op == "select":
+            self.select(command.get("scenario", self.run_id), command.get("variant"))
+        elif op == "reference":
+            self.scenario.set_reference(command.get("id"))
+        elif op == "scale":
+            self.scale = float(np.clip(command.get("value", self.scale), *SCALE_RANGE))
+            self.scenario.set_scale(self.scale)
+        elif op == "speed":
+            self.speed = float(np.clip(command.get("value", self.speed), *SPEED_RANGE))
+        elif op == "pause":
+            self.paused = bool(command.get("value", not self.paused))
+        elif op == "reset":
+            self.select(self.run_id, self.variant)
+        elif op == "step":
+            for _ in range(int(command.get("n", 1))):
+                self._step_once()
 
     # --- the loop ---------------------------------------------------------
 
     def run(self) -> None:
-        self._publish()                      # frame 0, so a client that
-        started = time.perf_counter()        # connects first sees something
+        last = time.perf_counter()
 
         while not self._stop.is_set():
-            elapsed = (time.perf_counter() - started) * self.speed
-            due = int(elapsed / self.dt) - self._steps
+            self._drain()
 
+            now = time.perf_counter()
+            if not self.paused:
+                self._budget += (now - last) * self.speed
+            last = now
+
+            due = int(self._budget / self.dt)
             if due > MAX_CATCHUP_STEPS:
-                # Too far behind to make up honestly. Forget the lost time.
-                self._steps = int(elapsed / self.dt)
-                due = 1
+                due, self._budget = 1, 0.0      # forfeit the lost time
+            else:
+                self._budget -= due * self.dt
 
             for _ in range(max(due, 0)):
                 self._step_once()
@@ -107,33 +176,30 @@ class SimulationThread(threading.Thread):
             time.sleep(0.001)
 
     def _step_once(self) -> None:
-        t = self.env.data.time
-        q_d, qd_d, qdd_d = self.reference(t)
-
-        tau, primitives = self.controller.update(q_d, qd_d, qdd_d)
+        tau, primitives, q_ref = self.scenario.step(self.env.data.time)
         self.panda.set_arm_torque(tau)
         self.env.step()
         self._steps += 1
 
         if self._steps % self.publish_every == 0:
-            self._publish(q_d, tau, primitives)
+            self._publish(q_ref, tau, primitives)
 
-    def _publish(self, q_d=None, tau=None, primitives=()) -> None:
+    def _publish(self, q_ref=None, tau=None, primitives=()) -> None:
         """Build the frame the socket will send. Called from the sim thread."""
-        if q_d is None:
-            q_d, _, _ = self.reference(self.env.data.time)
-            tau = np.zeros(self.panda.n_arm)
+        if q_ref is None:
+            q_ref, tau = self.panda.arm_q, np.zeros(self.panda.n_arm)
 
-        error = np.degrees(self.panda.arm_q - q_d)
         frame = state_message(
             self.env.data.time,
             self.scene.transforms(self.env.data),
             primitives,
             channels={
-                "error_deg": [round(v, 4) for v in error.tolist()],
+                "error_deg": [round(v, 4) for v in
+                              np.degrees(self.panda.arm_q - q_ref).tolist()],
                 "torque_nm": [round(v, 3) for v in np.asarray(tau).tolist()],
             },
         )
+        frame["active"] = self.state()
         with self._lock:
             self._frame = frame
 

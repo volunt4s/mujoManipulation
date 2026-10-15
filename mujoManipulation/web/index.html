@@ -6,11 +6,12 @@
 <!--
   Phase 3. The geometry arrives once, a transform per geom arrives every frame,
   and the controller's draw primitives arrive with it — the same plain data the
-  native MuJoCo renderer eats, drawn here by web/primitives.js. Controls, the
-  equation panel and the plots are still to come.
+  native MuJoCo renderer eats, drawn here by web/primitives.js. The menu is
+  generated from what the server says it can run (web/menu.js); the equation
+  panel and the plots are still to come.
 
   three.js comes from a pinned CDN rather than a bundle, because this machine
-  has no node and because a reader should be able to open these three files and
+  has no node and because a reader should be able to open these four files and
   see the whole client. `curl` the two URLs into web/vendor/ if you need it to
   work offline.
 -->
@@ -27,40 +28,109 @@
   :root {
     --bg: #14161a;
     --panel: rgba(20, 22, 26, 0.82);
+    --sheet: #1a1d23;
     --line: #2b2f37;
+    --line-soft: #23262d;
     --text: #e6e8ec;
     --dim: #8b919c;
+    --dimmer: #5f656f;
     --good: #5bc98f;
     --bad: #e8705a;
+    --accent: #7aa2f7;
     --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text);
                font: 13px/1.5 system-ui, -apple-system, sans-serif; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+
   /* The explicit size matters: a canvas is a replaced element, so `inset: 0`
      with `width: auto` does NOT stretch it — it lays out at its intrinsic size,
      which is the WebGL backing store (twice the window on a 2x display). */
   #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  /* --- heads-up readout --- */
   #hud {
     position: fixed; top: 12px; left: 12px; padding: 10px 14px;
     background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
     backdrop-filter: blur(8px); font-family: var(--mono); font-size: 12px;
-    line-height: 1.7; pointer-events: none; min-width: 210px;
+    line-height: 1.7; pointer-events: none; min-width: 230px;
   }
   #hud h1 { margin: 0 0 6px; font-size: 12px; letter-spacing: .08em;
             text-transform: uppercase; color: var(--dim); font-weight: 600; }
   #hud .row { display: flex; justify-content: space-between; gap: 18px; }
   #hud .k { color: var(--dim); }
+  #st-run { color: var(--accent); }
   .up { color: var(--good); }
   .down { color: var(--bad); }
   #note { position: fixed; bottom: 12px; left: 12px; color: var(--dim);
           font-family: var(--mono); font-size: 11px; }
+  #note kbd { color: var(--text); background: var(--line-soft);
+              border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; }
+
+  /* --- the menu --- */
+  #menu { position: fixed; inset: 0; background: rgba(10, 11, 13, 0.72);
+          backdrop-filter: blur(3px); overflow-y: auto; z-index: 10;
+          padding: 40px 20px; display: flex; justify-content: center;
+          align-items: flex-start; }
+  .menu-panel { width: min(760px, 100%); background: var(--sheet);
+                border: 1px solid var(--line); border-radius: 12px;
+                padding: 22px 24px 18px; }
+  .menu-panel h2 { margin: 6px 0 10px; font-size: 11px; letter-spacing: .1em;
+                   text-transform: uppercase; color: var(--dim); font-weight: 600; }
+  .menu-panel h2 + .card { margin-top: 0; }
+
+  .card { border: 1px solid var(--line-soft); border-radius: 9px;
+          padding: 12px 14px; margin: 9px 0; }
+  .card.active { border-color: var(--accent); background: rgba(122, 162, 247, 0.06); }
+  .card.soon { opacity: .4; }
+  .card-head { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--dimmer);
+         flex: none; }
+  .card.active .dot { background: var(--accent); }
+  .card-title { font-weight: 600; }
+  .card-sub { color: var(--dim); font-size: 12px; }
+  .equation { font-family: var(--mono); font-size: 14px; margin: 9px 0 11px;
+              letter-spacing: .01em; }
+  .equation .term { font-weight: 600; }
+
+  .variants { display: flex; flex-wrap: wrap; gap: 7px; }
+  .variant { display: flex; flex-direction: column; gap: 1px; text-align: left;
+             background: transparent; border: 1px solid var(--line);
+             border-radius: 7px; padding: 6px 10px; }
+  .variant:hover { border-color: var(--dim); }
+  .variant.on { border-color: var(--accent); background: rgba(122, 162, 247, 0.12); }
+  .variant-label { font-size: 12px; }
+  .variant-note { font-size: 11px; color: var(--dim); font-family: var(--mono); }
+
+  .refs { display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+          margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--line-soft); }
+  .refs-label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+                color: var(--dim); }
+  .chip { background: transparent; border: 1px solid var(--line);
+          border-radius: 20px; padding: 4px 11px; font-size: 12px; }
+  .chip:hover { border-color: var(--dim); }
+  .chip.on { border-color: var(--accent); background: rgba(122, 162, 247, 0.12); }
+
+  .view-section { border: 1px solid var(--line-soft); border-radius: 9px;
+                  padding: 14px; }
+  .slider + .slider { margin-top: 16px; }
+  .slider-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .slider-label { font-size: 12px; }
+  .slider-value { font-family: var(--mono); font-size: 12px; color: var(--dim); }
+  .slider input { width: 100%; margin: 7px 0 0; accent-color: var(--accent); }
+  .slider-help { margin: 5px 0 0; font-size: 11px; color: var(--dimmer); }
+  .buttons { display: flex; gap: 7px; margin-top: 16px; padding-top: 14px;
+             border-top: 1px solid var(--line-soft); }
+  .menu-hint { margin: 14px 0 0; font-size: 11px; color: var(--dimmer);
+               font-family: var(--mono); }
 </style>
 
 <canvas id="view"></canvas>
 
 <div id="hud">
   <h1>mujoManipulation</h1>
+  <div class="row"><span class="k">running</span><span id="st-run">—</span></div>
   <div class="row"><span class="k">socket</span><span id="st-socket" class="down">connecting</span></div>
   <div class="row"><span class="k">sim time</span><span id="st-time">—</span></div>
   <div class="row"><span class="k">frames/s</span><span id="st-fps">—</span></div>
@@ -68,6 +138,10 @@
   <div class="row"><span class="k">drawn</span><span id="st-draw">—</span></div>
 </div>
 
-<div id="note">drag to orbit · scroll to zoom · R to reset the view</div>
+<div id="note">
+  drag to orbit · scroll to zoom · <kbd>R</kbd> reset camera · <kbd>Esc</kbd> menu
+</div>
+
+<div id="menu" hidden></div>
 
 <script type="module" src="/web/app.js"></script>

@@ -32,8 +32,11 @@ from ..viz.primitives import Arrow
 # Arrow length is torque / this, so one metre of arrow is this many newton-metres.
 NM_PER_METRE = 40.0
 
-_LOAD_RGBA = (0.95, 0.35, 0.15, 0.95)       # g(q): what gravity asks for
-_RESIDUAL_RGBA = (0.95, 0.75, 0.15, 0.30)   # what it still gets, uncompensated
+# Public because the web layer sends these to the browser: a term's colour in
+# the equation panel has to be the same colour as its arrow, and this is the
+# only place that decides it.
+LOAD_RGBA = (0.95, 0.35, 0.15, 0.95)       # g(q): what gravity asks for
+RESIDUAL_RGBA = (0.95, 0.75, 0.15, 0.30)   # what it still gets, uncompensated
 
 
 class GravityCompensation:
@@ -89,7 +92,7 @@ class GravityCompensation:
                     origin=anchor,
                     vec=axis * (load_i / self.nm_per_metre),
                     width=0.008,
-                    rgba=_LOAD_RGBA,
+                    rgba=LOAD_RGBA,
                 )
             )
             primitives.append(
@@ -97,7 +100,7 @@ class GravityCompensation:
                     origin=anchor,
                     vec=axis * (residual_i / self.nm_per_metre),
                     width=0.020,
-                    rgba=_RESIDUAL_RGBA,
+                    rgba=RESIDUAL_RGBA,
                 )
             )
         return primitives
