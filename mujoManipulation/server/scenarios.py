@@ -29,9 +29,11 @@ import numpy as np
 
 from ..controller import computed_torque as ct
 from ..controller import gravity_comp as gc
+from ..controller import osc as osc_mod
 from ..controller import pid as pid_mod
 from ..controller.computed_torque import ComputedTorque
 from ..controller.gravity_comp import GravityCompensation
+from ..controller.osc import OperationalSpaceControl
 from ..controller.pid import JointSpacePID
 
 
@@ -177,9 +179,65 @@ class ComputedTorqueRun:
         self.controller.nm_per_metre = nm_per_metre
 
 
+# --- rung 3 ---------------------------------------------------------------
+
+
+class OSCRun:
+    """τ = Jᵀ Λ(q)(K_p e + K_d ė) + h(q, q̇) + N τ₀, servoing the gripper frame.
+
+    The task arrives as a joint pose like everyone else's, and the controller
+    turns it into the end-effector frame it actually chases — which is what
+    keeps the comparison honest while every goal on offer is still joint-space.
+    """
+
+    id = "osc"
+    title = "Operational-space control"
+    equation = [
+        _plain("τ = Jᵀ "),
+        _term("Λ(q)", osc_mod.WRENCH_RGBA, "l"),
+        _plain("(K_p e + K_d ė) + "),
+        _term("h(q, q̇)", osc_mod.BIAS_RGBA, "h"),
+        _plain(" + "),
+        _term("N τ₀", osc_mod.NULLSPACE_RGBA, "n"),
+    ]
+    variants = [
+        {"id": None, "label": "full OSC"},
+        {"id": "n", "label": "no null-space"},
+        {"id": "l", "label": "no Λ(q)"},
+        {"id": "h", "label": "no h(q, q̇)"},
+    ]
+
+    # examples/03's numbers. K_p is a stiffness in N/m, and it means the same
+    # thing at every pose, which is the whole of what Λ buys.
+    K_P, K_D = 600.0, 50.0
+    K_P_NULL, K_D_NULL = 12.0, 7.0
+
+    def __init__(self, robot, dt, variant=None):
+        self.robot = robot
+        self.controller = OperationalSpaceControl(
+            robot, K_p=self.K_P, K_d=self.K_D,
+            K_p_null=self.K_P_NULL, K_d_null=self.K_D_NULL,
+            use_nullspace=variant != "n",
+            use_lambda=variant != "l",
+            use_bias=variant != "h",
+        )
+
+    def step(self, q_d, qd_d, qdd_d):
+        # q̈_d is dropped: turning it into a task acceleration needs the J̇ q̇
+        # term, which this rung does not carry.
+        return self.controller.update(q_d, qd_d)
+
+    def reset(self):
+        self.controller.reset()
+
+    def set_scale(self, nm_per_metre):
+        self.controller.nm_per_metre = nm_per_metre
+
+
 # --- the catalogue --------------------------------------------------------
 
-SCENARIOS = {run.id: run for run in (GravityRun, PIDRun, ComputedTorqueRun)}
+SCENARIOS = {run.id: run
+             for run in (GravityRun, PIDRun, ComputedTorqueRun, OSCRun)}
 
 
 def valid_variant(run_id: str, variant):
@@ -210,8 +268,6 @@ def catalogue() -> list:
         for run in SCENARIOS.values()
     ]
     listed += [
-        {"id": "osc", "title": "Operational-space control", "equation": [],
-         "variants": [], "available": False},
         {"id": "impedance", "title": "Impedance control", "equation": [],
          "variants": [], "available": False},
     ]

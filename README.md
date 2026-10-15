@@ -30,6 +30,7 @@ python examples/00_gravity_comp.py --headless            # the arm holds itself 
 python examples/00_gravity_comp.py --headless -b         # and here is what it was holding
 python examples/01_joint_pid.py --headless -b i          # no integral: a permanent droop
 python examples/02_computed_torque.py --headless --pid   # the same stroke, no model
+python examples/03_osc.py --headless --settle -b         # the tip arrives, the elbow wanders
 ```
 
 On macOS a run that opens a MuJoCo window needs `mjpython`; `--headless` and the server
@@ -39,15 +40,23 @@ do not.
 
 One task — home to a reach pose on a minimum-jerk profile — under each law in turn:
 
-| | peak joint error | settled | end effector |
+| | end effector | peak joint error | settled |
 |---|---|---|---|
-| Gravity compensation | 57.30° | 57.296° | 202 mm off target |
-| Joint-space PID | 7.16° | 0.018° | 0.1 mm |
-| Computed torque | 0.02° | 0.000° | 0.0 mm |
+| Gravity compensation | 202 mm off target | 57.30° | 57.296° |
+| Joint-space PID | 0.37 mm | 7.06° | 0.049° |
+| Computed torque | 0.00 mm | 0.04° | 0.000° |
+| Operational-space control | 0.00 mm | 21.96° | 0.049° |
 
 Feedforward alone never leaves home. Feedback arrives seven degrees behind. Putting the
-model in the loop tracks to two hundredths of a degree — and the same two gains then work
+model in the loop tracks to four hundredths of a degree — and the same two gains then work
 at every pose, where the PID needed seven hand-tuned pairs.
+
+The last row is being measured by the wrong yardstick on purpose. Operational-space control
+is given a *pose*, not seven angles, and what the joints do on the way there is a free
+parameter rather than an error: seven joints chasing six numbers have one degree of freedom
+left over. Switch its null-space term off and the tip still lands within 0.08 mm while the
+arm settles 98° away from the posture it was handed — the clearest picture of redundancy
+there is, and `examples/03_osc.py --settle -b` prints it.
 
 ## The one rule
 
