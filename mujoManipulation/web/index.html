@@ -53,6 +53,9 @@
   button { font: inherit; color: inherit; cursor: pointer; }
 
   #app { display: flex; height: 100%; }
+  /* The stage and the plot strip share a column, so opening the strip takes
+     height from the stage rather than covering it. */
+  #right { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 
   /* --- the stage --- */
   /* The canvas is absolutely positioned and told its size in CSS. A canvas is a
@@ -60,7 +63,7 @@
      it — it lays out at its backing-store size, twice the window on a 2x
      display. `setSize(w, h, false)` then leaves the stylesheet in charge and
      there is no inline-versus-sheet fight to feed back into the measurement. */
-  #stage { position: relative; flex: 1; min-width: 0; }
+  #stage { position: relative; flex: 1; min-width: 0; min-height: 0; }
   #view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   #note { position: absolute; bottom: 12px; left: 14px; color: var(--dimmer);
           font-family: var(--mono); font-size: 11px; }
@@ -139,6 +142,21 @@
   .buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px;
              padding-top: 12px; border-top: 1px solid var(--line-soft); }
 
+  /* --- the plot strip --- */
+  #plot-strip { flex: none; background: var(--sheet);
+                border-top: 1px solid var(--line); }
+  #plot-bar { display: flex; align-items: center; gap: 10px; padding: 9px 12px; }
+  #plot-bar .grow { flex: 1; }
+  /* `display` is set here, so visibility is a class -- see the note at the top. */
+  #plots { display: none; gap: 12px; padding: 0 12px 12px; }
+  #plots.open { display: flex; }
+  .plot { flex: 1; min-width: 0; }
+  .plot-head { display: flex; justify-content: space-between; align-items: baseline;
+               font-size: 11px; color: var(--dim); padding-bottom: 3px; }
+  .plot-value { font-family: var(--mono); font-size: 11px; color: var(--dimmer); }
+  .plot canvas { width: 100%; height: 104px; display: block;
+                 background: rgba(0, 0, 0, 0.18); border-radius: 5px; }
+
   /* Narrow windows stack instead of squeezing the stage to nothing. */
   @media (max-width: 760px) {
     #app { flex-direction: column; }
@@ -162,9 +180,23 @@
     <div id="controls"></div>
   </aside>
 
-  <div id="stage">
-    <canvas id="view"></canvas>
-    <div id="note">drag to orbit · scroll to zoom · <kbd>R</kbd> reset camera</div>
+  <div id="right">
+    <div id="stage">
+      <canvas id="view"></canvas>
+      <div id="note">drag to orbit · scroll to zoom · <kbd>R</kbd> reset camera</div>
+    </div>
+
+    <section id="plot-strip">
+      <div id="plot-bar">
+        <button id="plot-toggle" class="section-head folded">
+          <span class="caret">&rsaquo;</span><span>plots</span>
+        </button>
+        <span class="grow"></span>
+        <span class="plot-value">10 s window</span>
+        <button id="plot-clear" class="chip">clear</button>
+      </div>
+      <div id="plots"></div>
+    </section>
   </div>
 </div>
 

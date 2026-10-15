@@ -22,7 +22,9 @@ Pick a start pose, an end pose and a profile, then **switch the control law unde
 the arm is still moving**. The running law's equation is the control panel: each term is a
 button in its own colour, the same colour as its arrow in the scene, and clicking it
 switches that term off mid-motion to show the failure it prevents. The gains are sliders
-next to it — move `K_p` and watch the response change in the same second.
+next to it — move `K_p` and watch the response change in the same second — and the plots
+along the bottom put a tick on the time axis at the instant you changed anything, so what
+the trace did about it is the next thing you see.
 
 Each rung also runs on its own from the command line and prints its numbers:
 

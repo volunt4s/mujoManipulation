@@ -301,6 +301,13 @@ class SimulationThread(threading.Thread):
                 "error_deg": [round(v, 4) for v in
                               np.degrees(self.panda.arm_q - q_ref).tolist()],
                 "torque_nm": [round(v, 3) for v in np.asarray(tau).tolist()],
+                # How far the gripper is from the frame it was asked for, in mm.
+                # For the task-space rungs this is the error and the joint one is
+                # the wrong yardstick; for the joint-space rungs it is the other
+                # way round. Both are sent so the plots can show the ladder
+                # being honest about which is which.
+                "tip_mm": round(float(np.linalg.norm(
+                    self.panda.ee_pos - self._goal_ee_pose(q_ref)[0]) * 1000), 3),
             },
         )
         frame["active"] = self.state()

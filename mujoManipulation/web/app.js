@@ -7,6 +7,7 @@
 
 import { Viewer } from '/web/viewer.js';
 import { Controls } from '/web/controls.js';
+import { Plots } from '/web/plots.js';
 
 const el = (id) => document.getElementById(id);
 
@@ -24,9 +25,17 @@ function send(command) {
   if (socket && socket.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(command));
   }
+  // Mark the instant on the plots. The client is the only thing that knows when
+  // a command was sent, and "here is where the damper went off, and here is what
+  // the trace did about it" is most of why the plots are worth having.
+  const kind = { term: 'term', gain: 'gain', push: 'push' }[command.op];
+  if (kind) plots.mark(latest && latest.t, kind);
+  else if (command.op === 'reset') plots.clear();
+  else if (command.op) plots.mark(latest && latest.t, 'select');
 }
 
 const controls = new Controls(el('controls'), send);
+const plots = new Plots(el('plots'));
 
 async function loadScene() {
   const desc = await (await fetch('/scene')).json();
@@ -62,6 +71,15 @@ function connect() {
   socket.onerror = () => socket.close();
 }
 
+el('plot-toggle').onclick = () => {
+  const open = el('plots').classList.toggle('open');
+  el('plot-toggle').classList.toggle('folded', !open);
+  el('plot-toggle').querySelector('.caret').textContent = open ? '\u2304' : '\u203a';
+  plots.setVisible(open);
+  viewer.resize();              // the stage just changed height
+};
+el('plot-clear').onclick = () => plots.clear();
+
 document.addEventListener('keydown', (e) => {
   // `code` rather than `key`, because a non-Latin keyboard layout reports a
   // different `key` for the letter but the same physical key.
@@ -94,9 +112,11 @@ function tick() {
     el('st-draw').textContent =
       `${latest.draw.length} prim / ${count} mesh` + (dropped ? ` (+${dropped} dropped)` : '');
     controls.setActive(latest.active);
+    plots.push(latest.t, latest.channels);
     applied = latest.t;
   }
   viewer.render();
+  plots.render();
   requestAnimationFrame(tick);
 }
 
