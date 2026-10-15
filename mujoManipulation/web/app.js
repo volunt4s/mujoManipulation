@@ -76,10 +76,10 @@ setInterval(() => {
 
 function describeRun(active) {
   if (!active || !active.scenario) return '—';
-  const variant = active.variant ? ` · ${active.variant}` : '';
+  const off = (active.off || []).length ? ` · no ${active.off.join(', ')}` : '';
   const paused = active.paused ? ' · paused' : '';
   const speed = active.speed !== 1 ? ` · ${active.speed}x` : '';
-  return `${active.scenario}${variant}${speed}${paused}`;
+  return `${active.scenario}${off}${speed}${paused}`;
 }
 
 function tick() {

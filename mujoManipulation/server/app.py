@@ -3,7 +3,7 @@
     GET  /            the page
     GET  /scene       the static description — geoms, materials, mesh table
     GET  /scene.bin   the geometry, once (3.12 MB, 1.72 MB gzipped)
-    GET  /catalogue   the rungs, their equations and their break-it variants
+    GET  /catalogue   the rungs, their equations, their switches and their gains
     WS   /ws          state frames out, commands in
 
 The socket handler never touches the simulation directly. Outbound it reads the

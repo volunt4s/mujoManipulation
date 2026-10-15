@@ -19,9 +19,10 @@ python -m mujoManipulation.server       # then open http://127.0.0.1:8000
 ```
 
 Pick a start pose, an end pose and a profile, then **switch the control law underneath while
-the arm is still moving**. Every term of the running equation is an arrow in the scene, in
-the colour the equation gives it, and any one of them can be switched off mid-motion to show
-the failure it prevents.
+the arm is still moving**. The running law's equation is the control panel: each term is a
+button in its own colour, the same colour as its arrow in the scene, and clicking it
+switches that term off mid-motion to show the failure it prevents. The gains are sliders
+next to it — move `K_p` and watch the response change in the same second.
 
 Each rung also runs on its own from the command line and prints its numbers:
 

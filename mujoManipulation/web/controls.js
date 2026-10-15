@@ -2,7 +2,7 @@
 //
 // Nothing in this file knows that a PID has an integral or that computed torque
 // has a mass matrix. It reads /catalogue, renders whatever rungs are listed with
-// whatever terms and break-it variants they declare, and sends back commands.
+// whatever switchable terms and gains they declare, and sends back commands.
 // Adding a rung is an entry in server/scenarios.py and no JavaScript.
 //
 // It is a section of the page that is always there, not a panel that opens.
@@ -137,19 +137,23 @@ export class Controls {
     return row;
   }
 
-  // Collapsed to a title and its equation until it is the one running; the
-  // variants only appear on the card whose controller is actually loaded,
-  // because a break-it button on an inactive rung would be two actions wearing
-  // the coat of one.
+  // Collapsed to a title and its equation until it is the one running. The
+  // equation *is* the control panel: a term the rung can switch is a button, in
+  // its own colour, struck through when it is off. Everything a rung can switch
+  // that is not a term in the equation -- the PID's anti-windup -- becomes a
+  // chip underneath, and the gains become sliders. None of it is written here;
+  // all of it comes from server/scenarios.py.
   #card(run) {
     const isActive = run.id === this.active.scenario;
+    const off = new Set(isActive ? this.active.off || [] : []);
+    const switchable = new Set((run.switches || []).map((s) => s.id));
     const card = el('div', `card${isActive ? ' active' : ''}${run.available ? '' : ' soon'}`);
 
     const head = el('button', 'card-head');
     head.appendChild(el('span', 'dot'));
     head.appendChild(el('span', 'card-title', run.title));
     if (run.available) {
-      head.onclick = () => this.send({ op: 'select', scenario: run.id, variant: null });
+      head.onclick = () => this.send({ op: 'select', scenario: run.id, off: [] });
     } else {
       head.disabled = true;
     }
@@ -158,25 +162,45 @@ export class Controls {
     if (run.equation.length) {
       const eq = el('div', 'equation');
       for (const piece of run.equation) {
-        const span = el('span', piece.term ? 'term' : null, piece.text);
-        if (piece.rgba) span.style.color = rgbaCss(piece.rgba);
-        eq.appendChild(span);
+        const live = isActive && switchable.has(piece.term);
+        const node = el(live ? 'button' : 'span',
+          piece.term ? `term${off.has(piece.term) ? ' off' : ''}${live ? ' live' : ''}` : null,
+          piece.text);
+        if (piece.rgba) node.style.color = rgbaCss(piece.rgba);
+        if (live) {
+          node.title = off.has(piece.term) ? 'switch it back on' : 'switch it off';
+          node.onclick = () =>
+            this.send({ op: 'term', id: piece.term, on: off.has(piece.term) });
+        }
+        eq.appendChild(node);
       }
       card.appendChild(eq);
     }
 
-    if (isActive && run.variants.length) {
-      const row = el('div', 'variants');
-      for (const variant of run.variants) {
-        const on = isActive && (this.active.variant ?? null) === (variant.id ?? null);
-        const button = el('button', `variant${on ? ' on' : ''}`, variant.label);
-        button.onclick = () =>
-          this.send({ op: 'select', scenario: run.id, variant: variant.id ?? null });
+    if (!isActive) return card;
+
+    // Switches with no term of their own in the equation.
+    const extra = (run.switches || []).filter(
+      (s) => !run.equation.some((piece) => piece.term === s.id));
+    if (extra.length) {
+      const row = el('div', 'toggles');
+      for (const s of extra) {
+        const button = el('button', `chip${off.has(s.id) ? '' : ' on'}`, s.label);
+        button.onclick = () => this.send({ op: 'term', id: s.id, on: off.has(s.id) });
         row.appendChild(button);
       }
       card.appendChild(row);
     }
 
+    const values = this.active.gains || {};
+    for (const gain of run.gains || []) {
+      card.appendChild(this.#slider(
+        gain.label, values[gain.id] ?? gain.min, gain.min, gain.max, gain.step,
+        gain.unit, (value) => this.send({ op: 'gain', id: gain.id, value })));
+    }
+    if (!run.gains.length) {
+      card.appendChild(el('p', 'no-gains', 'no gains — there is nothing to tune'));
+    }
     return card;
   }
 

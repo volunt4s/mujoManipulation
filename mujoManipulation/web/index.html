@@ -105,20 +105,25 @@
   /* Wrap between terms, never inside one. */
   .equation { font-family: var(--mono); font-size: 12px; margin: 8px 0 10px; }
   .equation .term { font-weight: 600; white-space: nowrap; }
-
-  .variants { display: flex; flex-wrap: wrap; gap: 6px; }
-  .variant { background: transparent; border: 1px solid var(--line);
-             border-radius: 7px; padding: 4px 10px; font-size: 12px; }
-  .variant:hover { border-color: var(--dim); }
-  .variant.on { border-color: var(--accent); background: rgba(122, 162, 247, 0.12); }
+  /* A term the running rung can switch is a button in its own colour. */
+  .equation button.term { background: transparent; border: 0; padding: 0 1px;
+                          font: inherit; font-weight: 600; border-bottom: 1px dotted;
+                          border-color: currentColor; }
+  .equation button.term:hover { background: rgba(255, 255, 255, 0.07);
+                                border-radius: 3px; }
+  .equation .term.off { text-decoration: line-through; opacity: .45;
+                        border-bottom-color: transparent; }
+  .no-gains { margin: 8px 0 0; font-size: 11px; color: var(--dimmer);
+              font-family: var(--mono); }
 
   .refs { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
   .refs + .refs, .refs + .slider { margin-top: 13px; }
   .refs-label { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
                 color: var(--dim); }
   .chip-row { display: flex; flex-wrap: wrap; gap: 5px; }
-  .toggles { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 14px;
-             padding-top: 12px; border-top: 1px solid var(--line-soft); }
+  .toggles { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+  .view-section .toggles { margin-top: 14px; padding-top: 12px;
+                           border-top: 1px solid var(--line-soft); }
   .chip { background: transparent; border: 1px solid var(--line);
           border-radius: 20px; padding: 3px 10px; font-size: 12px; }
   .chip:hover { border-color: var(--dim); }

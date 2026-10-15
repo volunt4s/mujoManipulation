@@ -45,7 +45,7 @@ from .model import load_model
 from .protocol import state_message
 from .reference import DURATION_RANGE, Reference
 from .scene import Scene
-from .scenarios import DEFAULT, SCENARIOS, valid_variant
+from .scenarios import DEFAULT, SCENARIOS, valid_off
 
 # Never run more than this many physics steps in one wake-up.
 MAX_CATCHUP_STEPS = 50
@@ -112,12 +112,13 @@ class SimulationThread(threading.Thread):
         self._lock = threading.Lock()
         self._stop = threading.Event()
 
-        self.run_id = self.variant = None
+        self.run_id = None
+        self.off = frozenset()
         self.select(DEFAULT)
 
     # --- what is running --------------------------------------------------
 
-    def select(self, run_id: str, variant=None) -> None:
+    def select(self, run_id: str, off=()) -> None:
         """Swap the controller, in place. Called on the sim thread.
 
         Nothing else moves: not the arm, not the goal, not the clock. Switching
@@ -127,9 +128,9 @@ class SimulationThread(threading.Thread):
         """
         if run_id not in SCENARIOS:
             return
-        variant = valid_variant(run_id, variant)
-        self.run_id, self.variant = run_id, variant
-        self.scenario = SCENARIOS[run_id](self.panda, self.dt, variant)
+        self.run_id = run_id
+        self.off = valid_off(run_id, off)
+        self.scenario = SCENARIOS[run_id](self.panda, self.dt, self.off)
         self.scenario.set_scale(self.scale)
         self._publish()
 
@@ -150,15 +151,19 @@ class SimulationThread(threading.Thread):
         self._steps = 0
         self._budget = 0.0
         self.reference.restart(self.env.data.time)
-        self.scenario = SCENARIOS[self.run_id](self.panda, self.dt, self.variant)
-        self.scenario.set_scale(self.scale)
+        # `reset`, not a rebuild. Rebuilding would hand the scenario its class
+        # defaults back and silently undo every gain the slider had moved --
+        # restarting a run is meant to restart the motion, not the tuning.
+        # The controllers' own reset() is what clears an integral or a filter.
+        self.scenario.reset()
         self._publish()
 
     def state(self) -> dict:
         """The switch positions, so a client can render its own controls."""
         return {
             "scenario": self.run_id,
-            "variant": self.variant,
+            "off": sorted(self.off),
+            "gains": self.scenario.gain_values(),
             "scale": self.scale,
             "speed": self.speed,
             "paused": self.paused,
@@ -190,7 +195,18 @@ class SimulationThread(threading.Thread):
     def _apply(self, command: dict) -> None:
         op = command.get("op")
         if op == "select":
-            self.select(command.get("scenario", self.run_id), command.get("variant"))
+            self.select(command.get("scenario", self.run_id), command.get("off", ()))
+        elif op == "term":
+            # Flipped on the live controller rather than by rebuilding it: a
+            # term switched off mid-motion is the whole point, and a rebuild
+            # would quietly reset whatever state the law was carrying.
+            term = command.get("id")
+            if term in {sw["id"] for sw in SCENARIOS[self.run_id].switches}:
+                on = bool(command.get("on", term in self.off))
+                self.off = (self.off - {term}) if on else (self.off | {term})
+                self.scenario.set_switch(term, on)
+        elif op == "gain":
+            self.scenario.set_gain(command.get("id"), command.get("value", 0.0))
         elif op == "start":
             self.reference.set_start(command.get("id"), self.env.data.time)
         elif op == "goal":
