@@ -3,7 +3,7 @@
     GET  /            the page
     GET  /scene       the static description — geoms, materials, mesh table
     GET  /scene.bin   the geometry, once (3.12 MB, 1.72 MB gzipped)
-    GET  /menu        the scenario catalogue the client builds its menu from
+    GET  /catalogue   the rungs, their equations and their break-it variants
     WS   /ws          state frames out, commands in
 
 The socket handler never touches the simulation directly. Outbound it reads the
@@ -27,6 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 
 from .loop import SimulationThread
+from .reference import DURATION_RANGE, GOALS, MOTIONS
 from .scenarios import catalogue
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -69,9 +70,15 @@ def create_app(xml_path: str = DEFAULT_XML, stream_hz: float = 60.0,
     async def scene():
         return JSONResponse(sim.scene.description())
 
-    @app.get("/menu")
-    async def menu():
-        return JSONResponse({"scenarios": catalogue(), "active": sim.state()})
+    @app.get("/catalogue")
+    async def catalogue_route():
+        return JSONResponse({
+            "scenarios": catalogue(),
+            "goals": GOALS,
+            "motions": MOTIONS,
+            "duration_range": DURATION_RANGE,
+            "active": sim.state(),
+        })
 
     @app.get("/scene.bin")
     async def scene_blob():

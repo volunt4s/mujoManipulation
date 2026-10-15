@@ -54,7 +54,12 @@ export class Viewer {
     this.#ground();
     this.primitives = new PrimitiveRenderer(this.scene);
 
-    window.addEventListener('resize', () => this.resize());
+    // Measured from the stage, never from the canvas itself: the canvas's own
+    // size is an output of this function, and reading it back would be a loop.
+    // A ResizeObserver covers the sidebar changing width or the window
+    // changing shape without either one having to know about the other.
+    this.stage = canvas.parentElement;
+    new ResizeObserver(() => this.resize()).observe(this.stage);
     this.resize();
   }
 
@@ -178,11 +183,14 @@ export class Viewer {
   }
 
   resize() {
-    const w = window.innerWidth, h = window.innerHeight;
-    // updateStyle left on: three then writes canvas.style.width/height in CSS
-    // pixels, which is the only thing that keeps the element's layout size and
-    // its backing store in agreement on a high-DPI screen.
-    this.renderer.setSize(w, h);
+    const box = this.stage.getBoundingClientRect();
+    const w = Math.max(1, Math.round(box.width));
+    const h = Math.max(1, Math.round(box.height));
+    // updateStyle off, because the stylesheet already gives the canvas an
+    // explicit 100% x 100% inside the stage. Letting three write inline pixels
+    // too would pin the element to the size we just measured and turn the next
+    // measurement into an echo of the last one.
+    this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }

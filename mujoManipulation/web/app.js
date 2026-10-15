@@ -6,7 +6,7 @@
 // dropped frame costs nothing and a slow tab cannot back up the server.
 
 import { Viewer } from '/web/viewer.js';
-import { Menu } from '/web/menu.js';
+import { Controls } from '/web/controls.js';
 
 const el = (id) => document.getElementById(id);
 
@@ -26,7 +26,7 @@ function send(command) {
   }
 }
 
-const menu = new Menu(el('menu'), send);
+const controls = new Controls(el('controls'), send);
 
 async function loadScene() {
   const desc = await (await fetch('/scene')).json();
@@ -39,9 +39,8 @@ async function loadScene() {
   );
 }
 
-async function loadMenu() {
-  menu.setCatalogue(await (await fetch('/menu')).json());
-  menu.open();              // land on the menu, with the scene already behind it
+async function loadControls() {
+  controls.setCatalogue(await (await fetch('/catalogue')).json());
 }
 
 function connect() {
@@ -63,9 +62,10 @@ function connect() {
   socket.onerror = () => socket.close();
 }
 
-window.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') menu.toggle();
-  else if (e.key === 'r' || e.key === 'R') viewer.resetView();
+document.addEventListener('keydown', (e) => {
+  // `code` rather than `key`, because a non-Latin keyboard layout reports a
+  // different `key` for the letter but the same physical key.
+  if (e.code === 'KeyR') viewer.resetView();
 });
 
 // Frames per second as measured, not as hoped for.
@@ -93,14 +93,14 @@ function tick() {
     const { count, dropped } = viewer.primitives;
     el('st-draw').textContent =
       `${latest.draw.length} prim / ${count} mesh` + (dropped ? ` (+${dropped} dropped)` : '');
-    menu.setActive(latest.active);
+    controls.setActive(latest.active);
     applied = latest.t;
   }
   viewer.render();
   requestAnimationFrame(tick);
 }
 
-Promise.all([loadScene(), loadMenu()]).then(connect).catch((e) => {
+Promise.all([loadScene(), loadControls()]).then(connect).catch((e) => {
   el('st-socket').textContent = 'load failed';
   console.error(e);
 });

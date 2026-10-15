@@ -25,6 +25,10 @@ class FrankaPanda:
     ARM_JOINTS = tuple(f"panda_joint{i}" for i in range(1, 8))
     GRIPPER_JOINTS = ("panda_finger_joint1", "panda_finger_joint2")
 
+    # The frame the web viewer draws and the frame operational-space control
+    # will servo. `grip_site` sits on `panda_eef`, between the fingers.
+    EE_SITE = "grip_site"
+
     ARM_ACTUATORS = tuple(f"panda_torq_j{i}" for i in range(1, 8))
     GRIPPER_ACTUATORS = (
         "panda_gripper_finger_joint1",
@@ -60,6 +64,8 @@ class FrankaPanda:
         self.arm_dof_adr = model.jnt_dofadr[self.arm_joint_ids]
         self.gripper_qpos_adr = model.jnt_qposadr[self.gripper_joint_ids]
 
+        self.ee_site_id = int(self._ids(mujoco.mjtObj.mjOBJ_SITE, (self.EE_SITE,))[0])
+
         self.n_arm = len(self.arm_joint_ids)
         self.arm_torque_limits = model.actuator_ctrlrange[self.arm_act_ids]
 
@@ -90,6 +96,17 @@ class FrankaPanda:
         return float(self.data.qpos[self.gripper_qpos_adr[0]])
 
     # --- world-frame geometry, for drawing --------------------------------
+
+    @property
+    def ee_pos(self) -> np.ndarray:
+        """(3,) world position of the end-effector site."""
+        return self.data.site_xpos[self.ee_site_id].copy()
+
+    @property
+    def ee_mat(self) -> np.ndarray:
+        """(3, 3) world orientation of the end-effector site, columns being its
+        axes — the layout `viz.primitives.Frame` wants."""
+        return self.data.site_xmat[self.ee_site_id].reshape(3, 3).copy()
 
     @property
     def arm_joint_anchors(self) -> np.ndarray:
