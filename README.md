@@ -31,6 +31,7 @@ python examples/00_gravity_comp.py --headless -b         # and here is what it w
 python examples/01_joint_pid.py --headless -b i          # no integral: a permanent droop
 python examples/02_computed_torque.py --headless --pid   # the same stroke, no model
 python examples/03_osc.py --headless --settle -b         # the tip arrives, the elbow wanders
+python examples/04_impedance.py --headless               # something pushes; it yields F/K
 ```
 
 On macOS a run that opens a MuJoCo window needs `mjpython`; `--headless` and the server
@@ -57,6 +58,13 @@ parameter rather than an error: seven joints chasing six numbers have one degree
 left over. Switch its null-space term off and the tip still lands within 0.08 mm while the
 arm settles 98° away from the posture it was handed — the clearest picture of redundancy
 there is, and `examples/03_osc.py --settle -b` prints it.
+
+The fifth law is not in the table because the table measures the wrong thing for it.
+Cartesian impedance asks how the arm should *behave* when something pushes back rather than
+how accurately it tracks: it strings a spring of a chosen stiffness between the gripper and
+its target, and push it with F and the tip moves F/K — 20 N against 150 N/m deflects it
+132 mm, against 2400 N/m 8 mm. Stiff is accurate and dangerous, soft is safe and vague, and
+that dial is the subject of the rung.
 
 ## The one rule
 

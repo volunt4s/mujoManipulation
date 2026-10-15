@@ -30,7 +30,7 @@ export class Controls {
     // Which sections are folded away. Local to the client — it is a view
     // preference, not a fact about the simulation — and kept on the instance so
     // that it survives the re-render every state change triggers.
-    this.collapsed = { goal: false, method: false, view: false };
+    this.collapsed = { goal: false, method: false, push: false, view: false };
   }
 
   setCatalogue(data) {
@@ -60,6 +60,7 @@ export class Controls {
     this.root.replaceChildren(
       ...this.#section('goal', 'goal', [this.#goalSection()]),
       ...this.#section('method', 'control algorithm', cards),
+      ...this.#section('push', 'disturbance', [this.#pushSection()]),
       ...this.#section('view', 'view', [this.#viewSection()]),
     );
   }
@@ -97,6 +98,29 @@ export class Controls {
     const [lo, hi] = this.durationRange;
     box.appendChild(this.#slider('duration', this.active.duration ?? 1, lo, hi, 0.1, 's',
       (value) => this.send({ op: 'duration', value })));
+    return box;
+  }
+
+  // Something to push against. Impedance control is the one rung whose subject
+  // is what happens when the world disagrees with the arm, and without a shove
+  // it looks like a soft version of the rung before it.
+  #pushSection() {
+    const box = el('div', 'view-section');
+    box.appendChild(this.#slider('force', this.active.push_newtons ?? 20, 0, 80, 5, 'N',
+      (value) => this.send({ op: 'push', value })));
+
+    const row = el('div', 'refs');
+    row.appendChild(el('span', 'refs-label', 'shove the gripper for a second'));
+    const chips = el('div', 'chip-row');
+    for (const axis of ['x', 'y', 'z']) {
+      for (const [sign, label] of [[false, `+${axis}`], [true, `\u2212${axis}`]]) {
+        const button = el('button', 'chip', label);
+        button.onclick = () => this.send({ op: 'push', axis, negative: sign });
+        chips.appendChild(button);
+      }
+    }
+    row.appendChild(chips);
+    box.appendChild(row);
     return box;
   }
 

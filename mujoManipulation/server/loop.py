@@ -40,7 +40,7 @@ import numpy as np
 
 from ..env import MuJoCoEnv
 from ..robot.panda import FrankaPanda
-from ..viz.primitives import Frame
+from ..viz.primitives import Arrow, Frame
 from .model import load_model
 from .protocol import state_message
 from .reference import DURATION_RANGE, Reference
@@ -60,6 +60,15 @@ SPEED_RANGE = (0.05, 4.0)
 # than it bought.
 EE_FRAME = {"length": 0.10, "width": 0.005}
 GOAL_FRAME = {"length": 0.15, "width": 0.011}
+
+# A shove at the gripper, for the rung whose subject is what happens when the
+# world disagrees. One second is long enough to settle under and short enough to
+# watch the recovery.
+PUSH_SECONDS = 1.0
+PUSH_RANGE = (0.0, 80.0)
+PUSH_AXES = {"x": (1.0, 0.0, 0.0), "y": (0.0, 1.0, 0.0), "z": (0.0, 0.0, 1.0)}
+PUSH_RGBA = (0.95, 0.25, 0.3, 0.95)
+N_PER_METRE = 80.0
 
 
 class SimulationThread(threading.Thread):
@@ -81,6 +90,10 @@ class SimulationThread(threading.Thread):
         self.paused = False
         self.scale = 40.0
         self.show = {"ee": True, "goal": True}
+        self.push_newtons = 20.0
+        self.push_force = np.zeros(3)
+        self.push_until = -1.0
+        self.ee_body = int(self.env.model.site_bodyid[self.panda.ee_site_id])
 
         # Where the arm is going, and how — owned here rather than by the
         # controller, so that swapping the controller changes the law and not
@@ -128,6 +141,8 @@ class SimulationThread(threading.Thread):
         instant of every profile a step the task never asked for.
         """
         self.env.reset()
+        self.push_until = -1.0
+        self.env.data.xfrc_applied[:] = 0.0
         self.panda.go_home()
         self.env.data.qpos[self.panda.arm_qpos_adr] = self.reference.start_q
         self.env.data.qvel[self.panda.arm_dof_adr] = 0.0
@@ -148,6 +163,8 @@ class SimulationThread(threading.Thread):
             "speed": self.speed,
             "paused": self.paused,
             "show": dict(self.show),
+            "push_newtons": round(self.push_newtons, 1),
+            "pushing": bool(self.env.data.time < self.push_until),
             **self.reference.state(),
         }
 
@@ -183,6 +200,17 @@ class SimulationThread(threading.Thread):
         elif op == "duration":
             self.reference.set_duration(
                 command.get("value", self.reference.duration), self.env.data.time)
+        elif op == "push":
+            axis = PUSH_AXES.get(command.get("axis"))
+            if axis is not None:
+                if "value" in command:
+                    self.push_newtons = float(
+                        np.clip(command["value"], *PUSH_RANGE))
+                sign = -1.0 if command.get("negative") else 1.0
+                self.push_force = sign * self.push_newtons * np.array(axis)
+                self.push_until = self.env.data.time + PUSH_SECONDS
+            elif "value" in command:
+                self.push_newtons = float(np.clip(command["value"], *PUSH_RANGE))
         elif op == "show":
             key = command.get("id")
             if key in self.show:
@@ -225,6 +253,15 @@ class SimulationThread(threading.Thread):
             time.sleep(0.001)
 
     def _step_once(self) -> None:
+        # The push is the one force in here that is not the controller's. It is
+        # applied to the plant directly, exactly as a hand would be, so that the
+        # controller finds out about it the only way a real one can: by being
+        # moved.
+        pushing = self.env.data.time < self.push_until
+        self.env.data.xfrc_applied[self.ee_body] = 0.0
+        if pushing:
+            self.env.data.xfrc_applied[self.ee_body, :3] = self.push_force
+
         q_d, qd_d, qdd_d = self.reference.sample(self.env.data.time)
         tau, primitives = self.scenario.step(q_d, qd_d, qdd_d)
         self.panda.set_arm_torque(tau)
@@ -268,6 +305,10 @@ class SimulationThread(threading.Thread):
         if self.show["goal"]:
             pos, mat = self._goal_ee_pose(q_ref)
             drawn.append(Frame(pos=pos, mat=mat, **GOAL_FRAME))
+        if self.env.data.time < self.push_until:
+            drawn.append(Arrow(origin=self.panda.ee_pos,
+                               vec=self.push_force / N_PER_METRE,
+                               width=0.015, rgba=PUSH_RGBA))
         return drawn
 
     def _goal_ee_pose(self, q_ref):

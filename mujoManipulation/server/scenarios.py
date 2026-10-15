@@ -29,10 +29,12 @@ import numpy as np
 
 from ..controller import computed_torque as ct
 from ..controller import gravity_comp as gc
+from ..controller import impedance as imp_mod
 from ..controller import osc as osc_mod
 from ..controller import pid as pid_mod
 from ..controller.computed_torque import ComputedTorque
 from ..controller.gravity_comp import GravityCompensation
+from ..controller.impedance import CartesianImpedance
 from ..controller.osc import OperationalSpaceControl
 from ..controller.pid import JointSpacePID
 
@@ -234,10 +236,66 @@ class OSCRun:
         self.controller.nm_per_metre = nm_per_metre
 
 
+# --- rung 4 ---------------------------------------------------------------
+
+
+class ImpedanceRun:
+    """τ = Jᵀ[K e + D ė] + h(q, q̇) + N τ₀ — a spring at the gripper.
+
+    The only rung whose point is not accuracy, which makes it the only one that
+    needs something to push against before it shows anything. `op: push` is that
+    something.
+    """
+
+    id = "impedance"
+    title = "Cartesian impedance"
+    equation = [
+        _plain("τ = Jᵀ["),
+        _term("K e", imp_mod.SPRING_RGBA, "spring"),
+        _plain(" + "),
+        _term("D ė", imp_mod.DAMPER_RGBA, "d"),
+        _plain("] + "),
+        _term("h(q, q̇)", imp_mod.BIAS_RGBA, "h"),
+        _plain(" + "),
+        _term("N τ₀", imp_mod.NULLSPACE_RGBA, "n"),
+    ]
+    variants = [
+        {"id": None, "label": "full impedance"},
+        {"id": "d", "label": "no damper"},
+        {"id": "h", "label": "no h(q, q̇)"},
+        {"id": "n", "label": "no null-space"},
+    ]
+
+    # examples/04's numbers. K is a compliance specification in N/m: push with F
+    # and the tip moves F/K.
+    K_P, K_D = 300.0, 35.0
+    K_P_NULL, K_D_NULL = 12.0, 7.0
+
+    def __init__(self, robot, dt, variant=None):
+        self.robot = robot
+        self.controller = CartesianImpedance(
+            robot, K_p=self.K_P, K_d=self.K_D,
+            K_p_null=self.K_P_NULL, K_d_null=self.K_D_NULL,
+            use_damping=variant != "d",
+            use_bias=variant != "h",
+            use_nullspace=variant != "n",
+        )
+
+    def step(self, q_d, qd_d, qdd_d):
+        return self.controller.update(q_d, qd_d)
+
+    def reset(self):
+        self.controller.reset()
+
+    def set_scale(self, nm_per_metre):
+        self.controller.nm_per_metre = nm_per_metre
+
+
 # --- the catalogue --------------------------------------------------------
 
 SCENARIOS = {run.id: run
-             for run in (GravityRun, PIDRun, ComputedTorqueRun, OSCRun)}
+             for run in (GravityRun, PIDRun, ComputedTorqueRun, OSCRun,
+                         ImpedanceRun)}
 
 
 def valid_variant(run_id: str, variant):
@@ -266,9 +324,5 @@ def catalogue() -> list:
             "available": True,
         }
         for run in SCENARIOS.values()
-    ]
-    listed += [
-        {"id": "impedance", "title": "Impedance control", "equation": [],
-         "variants": [], "available": False},
     ]
     return listed
