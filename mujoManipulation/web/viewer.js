@@ -1,9 +1,8 @@
 // The Three.js side of the native renderer's contract.
 //
-// `viz/native.py` turns draw primitives into MuJoCo `user_scn` geometry; this
-// file is its twin and will turn the same primitives into Three.js geometry in
-// W2. For W1 it does the part the native viewer gets for free: drawing the
-// robot itself, which nobody does for us in a browser.
+// This file does the part the native viewer gets for free: drawing the robot
+// itself, which nobody does for us in a browser. The draw primitives on top of
+// it are `primitives.js`, which is the actual twin of `viz/native.py`.
 //
 // The world is Z-up, because MuJoCo's is. Rather than rotating the scene into
 // Three's Y-up convention — which quietly inverts every primitive we are about
@@ -12,9 +11,18 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { PrimitiveRenderer } from '/web/primitives.js';
 
 const UP = new THREE.Vector3(0, 0, 1);
-const LOOK_AT = new THREE.Vector3(0, 0, 1.15);   // roughly the arm's shoulder
+
+// The centre of what is actually drawn, measured rather than guessed: the
+// visual geoms at the home pose span z = -0.008 .. 1.699, so their midpoint is
+// 0.85 and not the world origin. Aiming at (0, 0, 0) would put the whole robot
+// in the top half of the frame, because the arm stands on a pedestal.
+const LOOK_AT = new THREE.Vector3(0, 0, 0.85);
+// 2.9 m back fills about 70% of a 45-degree vertical fov with the 1.71 m of
+// robot, which leaves room for the arrows without them running off screen.
+const EYE = new THREE.Vector3(2.1, -2.1, 1.7);
 
 export class Viewer {
   constructor(canvas) {
@@ -30,15 +38,21 @@ export class Viewer {
 
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100);
     this.camera.up.copy(UP);
-    this.camera.position.set(1.9, -1.9, 2.1);
+    this.camera.position.copy(EYE);
 
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.target.copy(LOOK_AT);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
+    this.controls.maxDistance = 12;
+    this.controls.minDistance = 0.4;
+    // Orbiting under the floor is never what anyone wanted.
+    this.controls.maxPolarAngle = Math.PI * 0.49;
+    this.controls.saveState();        // so resetView() has somewhere to go
 
     this.#lights();
     this.#ground();
+    this.primitives = new PrimitiveRenderer(this.scene);
 
     window.addEventListener('resize', () => this.resize());
     this.resize();
@@ -155,9 +169,20 @@ export class Viewer {
     }
   }
 
+  // Orbit controls wander. One key to put the camera back where it started.
+  resetView() {
+    this.controls.reset();
+    this.camera.position.copy(EYE);
+    this.controls.target.copy(LOOK_AT);
+    this.controls.update();
+  }
+
   resize() {
     const w = window.innerWidth, h = window.innerHeight;
-    this.renderer.setSize(w, h, false);
+    // updateStyle left on: three then writes canvas.style.width/height in CSS
+    // pixels, which is the only thing that keeps the element's layout size and
+    // its backing store in agreement on a high-DPI screen.
+    this.renderer.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }

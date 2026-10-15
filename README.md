@@ -246,7 +246,6 @@ split that keeps actuators separate from robot bodies. Everything else is rewrit
       arrows per joint, and each switches off on its own: no M(q), no Coriolis (invisible
       until you go fast — it scales with q̇²), no gravity
 - [ ] Operational-space control (OSC)
-- [ ] Operational-space control (OSC)
 - [ ] Impedance control
 - [ ] Each ships with: the equation in its docstring, its quantities drawn via `viz/`,
       and a "break it" toggle in its demo

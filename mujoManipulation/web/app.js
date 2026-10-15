@@ -44,6 +44,10 @@ function connect() {
   ws.onerror = () => ws.close();
 }
 
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'r' || e.key === 'R') viewer.resetView();
+});
+
 // Frames per second as measured, not as hoped for.
 setInterval(() => {
   el('st-fps').textContent = framesSeen.toString();
@@ -53,8 +57,13 @@ setInterval(() => {
 function tick() {
   if (latest && latest.t !== applied) {
     viewer.applyFrame(latest.xform);
+    viewer.primitives.draw(latest.draw);
     el('st-time').textContent = `${latest.t.toFixed(2)} s`;
-    el('st-draw').textContent = latest.draw.length.toString();  // drawn in W2
+    // One primitive is often several meshes — an arrow is a shaft plus a
+    // cone — so both numbers are worth seeing.
+    const { count, dropped } = viewer.primitives;
+    el('st-draw').textContent =
+      `${latest.draw.length} prim / ${count} mesh` + (dropped ? ` (+${dropped} dropped)` : '');
     applied = latest.t;
   }
   viewer.render();
